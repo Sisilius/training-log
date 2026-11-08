@@ -47,6 +47,7 @@ button {
   cursor: pointer;
 }
 button:disabled { opacity: 0.55; cursor: default; }
+button.secondary { background: #252b36; color: #cfd6e4; }
 button.link {
   background: transparent;
   color: #8ab4f8;

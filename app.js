@@ -56,6 +56,7 @@ const userEmail = document.getElementById("user-email");
 const logoutButton = document.getElementById("logout");
 const dateInput = document.getElementById("date");
 const exportButton = document.getElementById("export");
+const checkButton = document.getElementById("check");
 const statusEl = document.getElementById("status");
 const daysEl = document.getElementById("days");
 const toast = document.getElementById("toast");
@@ -201,6 +202,35 @@ function flashToast(text) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 1200);
 }
 
+function cacheKey(date) {
+  return `training-log-cache:${date}`;
+}
+
+function cacheState(date, stateSnapshot) {
+  try {
+    localStorage.setItem(cacheKey(date), JSON.stringify(Object.fromEntries(stateSnapshot)));
+  } catch (_error) {
+    // localStorage may be unavailable; the in-memory state is still intact.
+  }
+}
+
+function readCache(date) {
+  try {
+    const raw = localStorage.getItem(cacheKey(date));
+    return raw ? new Map(Object.entries(JSON.parse(raw))) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function clearCache(date) {
+  try {
+    localStorage.removeItem(cacheKey(date));
+  } catch (_error) {
+    // ignore
+  }
+}
+
 function buildRows(date, stateSnapshot, userId) {
   const rows = [];
 
@@ -230,15 +260,31 @@ async function saveRows(date, stateSnapshot, userId) {
   if (!userId || !sb) return;
 
   setStatus("Сохранение...");
-  const { error } = await sb.from("workouts").upsert(buildRows(date, stateSnapshot, userId), {
-    onConflict: "user_id,workout_date,day,exercise"
-  });
+  let result;
 
-  if (error) {
-    setStatus("Ошибка сохранения: " + error.message);
+  try {
+    result = await sb.from("workouts").upsert(buildRows(date, stateSnapshot, userId), {
+      onConflict: "user_id,workout_date,day,exercise"
+    });
+  } catch (error) {
+    cacheState(date, stateSnapshot);
+    setStatus(
+      "Нет связи с Supabase. Данные сохранены локально. Нажми «Проверить связь»."
+    );
     return;
   }
 
+  if (result.error) {
+    cacheState(date, stateSnapshot);
+    setStatus(
+      "Ошибка сохранения: " +
+        result.error.message +
+        ". Данные сохранены локально. Нажми «Проверить связь»."
+    );
+    return;
+  }
+
+  clearCache(date);
   const time = new Date().toLocaleTimeString("ru-RU", {
     hour: "2-digit",
     minute: "2-digit"
@@ -249,7 +295,10 @@ async function saveRows(date, stateSnapshot, userId) {
 function enqueueSave(date, stateSnapshot, userId) {
   saveChain = saveChain
     .then(() => saveRows(date, stateSnapshot, userId))
-    .catch((error) => setStatus("Ошибка: " + error.message));
+    .catch((error) => {
+      cacheState(date, stateSnapshot);
+      setStatus("Ошибка сети: " + error.message + ". Данные сохранены локально.");
+    });
 }
 
 function scheduleSave() {
@@ -283,6 +332,14 @@ async function loadForDate() {
     .eq("workout_date", currentDate);
 
   if (error) {
+    const cached = readCache(currentDate);
+    if (cached) {
+      state = cached;
+      fillInputs();
+      setStatus("Нет связи с Supabase. Показаны локально сохранённые данные.");
+      return;
+    }
+
     setStatus("Ошибка загрузки: " + error.message);
     return;
   }
@@ -297,6 +354,14 @@ async function loadForDate() {
       pain: row.pain || ""
     });
   });
+
+  const cached = readCache(currentDate);
+  if (cached) {
+    cached.forEach((entry, key) => state.set(key, entry));
+    fillInputs();
+    setStatus("Есть локальные правки. Нажми «Проверить связь», чтобы отправить их.");
+    return;
+  }
 
   fillInputs();
   setStatus(data && data.length ? "Загружено" : "Новая дата");
@@ -382,6 +447,34 @@ dateInput.addEventListener("change", async () => {
 });
 
 exportButton.addEventListener("click", exportCsv);
+
+checkButton.addEventListener("click", async () => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    setStatus("config.js не заполнен: нет URL или anon key.");
+    return;
+  }
+
+  setStatus("Проверяю связь с Supabase...");
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/health`, {
+      headers: { apikey: supabaseAnonKey }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    setStatus("Связь с Supabase: OK");
+    if (currentUser) await flushSave();
+  } catch (error) {
+    setStatus(
+      "Нет связи с Supabase: " +
+        error.message +
+        ". Проверь VPN, AdBlock, Private DNS и открой сайт по https, а не через file://."
+    );
+  }
+});
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
