@@ -1,5 +1,15 @@
 const PLAN = window.PLAN || [];
 const LIBRARY = window.EXERCISE_LIBRARY || {};
+const COOLDOWN = window.COOLDOWN || [];
+
+const EXERCISE_ALIASES = {
+  "Разведение резины перед грудью": "Обратная «бабочка»",
+  "«Птица-собака»": "Планка"
+};
+
+function normalizeExerciseName(name) {
+  return EXERCISE_ALIASES[name] || name;
+}
 
 const appHeader = document.getElementById("app-header");
 const authView = document.getElementById("auth-view");
@@ -28,6 +38,7 @@ const planDaySelect = document.getElementById("plan-day");
 const timerBar = document.getElementById("timer-bar");
 const checkButton = document.getElementById("check");
 const statusEl = document.getElementById("status");
+const rpeHint = document.getElementById("rpe-hint");
 const analyticsStatus = document.getElementById("analytics-status");
 const daysEl = document.getElementById("days");
 const toast = document.getElementById("toast");
@@ -339,6 +350,35 @@ function createExerciseCard(day, item) {
   return card;
 }
 
+function createCooldownCard() {
+  const card = document.createElement("div");
+  card.className = "card";
+
+  const title = document.createElement("h2");
+  title.textContent = "Заминка и растяжка";
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    "После тренировки, 5–8 минут. Не до боли; на плече с пластиной — очень аккуратно.";
+
+  card.append(title, hint);
+
+  const list = document.createElement("ul");
+  list.className = "advice-list";
+
+  COOLDOWN.forEach((item) => {
+    const li = document.createElement("li");
+    const strong = document.createElement("b");
+    strong.textContent = `${item.name} — ${item.target}. `;
+    li.append(strong, document.createTextNode(item.note || ""));
+    list.appendChild(li);
+  });
+
+  card.appendChild(list);
+  return card;
+}
+
 function renderTrainingDay(day) {
   const section = document.createElement("section");
   section.className = "day";
@@ -354,6 +394,7 @@ function renderTrainingDay(day) {
     section.appendChild(createExerciseCard(day, item));
   });
 
+  section.appendChild(createCooldownCard());
   daysEl.appendChild(section);
 }
 
@@ -427,6 +468,7 @@ function renderPlan() {
   const isRest = dayId === "rest";
 
   timerBar.hidden = isRest;
+  rpeHint.hidden = isRest;
   autofillButton.disabled = isRest;
   daysEl.innerHTML = "";
 
@@ -903,7 +945,7 @@ function renderExerciseSelect() {
     ...new Set(
       analytics.workouts
         .filter((row) => statsForRow(row))
-        .map((row) => row.exercise)
+        .map((row) => normalizeExerciseName(row.exercise))
     )
   ].sort((a, b) => a.localeCompare(b, "ru"));
 
@@ -929,7 +971,9 @@ function renderExerciseChart() {
     return;
   }
 
-  const rows = analytics.workouts.filter((row) => row.exercise === name && statsForRow(row));
+  const rows = analytics.workouts.filter(
+    (row) => normalizeExerciseName(row.exercise) === name && statsForRow(row)
+  );
   const labels = rows.map((row) => formatDateShort(row.workout_date));
   const values = rows.map((row) => statsForRow(row).maxWeight);
   const colors = chartTheme();
@@ -1081,8 +1125,9 @@ function renderRecommendations() {
   analytics.workouts.forEach((row) => {
     const stats = statsForRow(row);
     if (!stats) return;
-    if (!byExercise.has(row.exercise)) byExercise.set(row.exercise, []);
-    byExercise.get(row.exercise).push({ date: row.workout_date, stats, plan: row.plan });
+    const exerciseName = normalizeExerciseName(row.exercise);
+    if (!byExercise.has(exerciseName)) byExercise.set(exerciseName, []);
+    byExercise.get(exerciseName).push({ date: row.workout_date, stats, plan: row.plan });
   });
 
   const hints = [];
