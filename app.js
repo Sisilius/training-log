@@ -28,6 +28,9 @@ const themeToggle2 = document.getElementById("theme-toggle-2");
 const fontToggle = document.getElementById("font-toggle");
 const installButton = document.getElementById("install");
 const installHint = document.getElementById("install-hint");
+const pwaStatus = document.getElementById("pwa-status");
+const pwaCheck = document.getElementById("pwa-check");
+const pwaReset = document.getElementById("pwa-reset");
 const librarySearch = document.getElementById("library-search");
 const libraryList = document.getElementById("library-list");
 const modal = document.getElementById("modal");
@@ -1724,6 +1727,72 @@ logoutButton.addEventListener("click", async () => {
   if (sb) await sb.auth.signOut();
 });
 
+async function checkPwa() {
+  const lines = [];
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+
+  lines.push(`Режим: ${standalone ? "установлено" : "браузер"}`);
+  lines.push(`Install prompt: ${deferredPrompt ? "получен" : "не получен"}`);
+
+  if ("serviceWorker" in navigator) {
+    const registration = await navigator.serviceWorker.getRegistration();
+    lines.push(
+      `SW: ${registration ? registration.active?.state || "нет активного" : "не зарегистрирован"}`
+    );
+    lines.push(`SW controller: ${navigator.serviceWorker.controller ? "да" : "нет"}`);
+    if (registration) lines.push(`scope: ${registration.scope}`);
+  } else {
+    lines.push("SW: не поддерживается");
+  }
+
+  try {
+    const response = await fetch("./manifest.webmanifest", { cache: "no-store" });
+    const manifest = await response.json();
+    lines.push(
+      `Manifest: ${response.status}, иконок ${manifest.icons?.length || 0}, display ${
+        manifest.display || "—"
+      }`
+    );
+  } catch (error) {
+    lines.push("Manifest: ошибка " + error.message);
+  }
+
+  if (navigator.getInstalledRelatedApps) {
+    try {
+      const apps = await navigator.getInstalledRelatedApps();
+      lines.push(`Установлено: ${apps.length ? "да" : "нет"}`);
+    } catch (_error) {
+      // optional API
+    }
+  }
+
+  pwaStatus.textContent = lines.join(" · ");
+  return lines;
+}
+
+async function resetPwa() {
+  if (
+    !confirm(
+      "Сбросить кэш приложения? Несинхронизированные локальные данные могут пропасть."
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+    const keys = await caches.keys();
+    await Promise.all(keys.map((key) => caches.delete(key)));
+  } catch (_error) {
+    // ignore
+  }
+
+  location.reload();
+}
+
 function showInstallInstructions() {
   const userAgent = navigator.userAgent;
   const isIOS = /iPad|iPhone|iPod/.test(userAgent);
@@ -1767,7 +1836,11 @@ window.addEventListener("beforeinstallprompt", (event) => {
   installButton.textContent = "Установить приложение";
   installButton.disabled = false;
   installHint.textContent = "Браузер готов установить приложение.";
+  pwaStatus.textContent = "Install prompt получен — нажми «Установить приложение».";
 });
+
+pwaCheck.addEventListener("click", checkPwa);
+pwaReset.addEventListener("click", resetPwa);
 
 installButton.addEventListener("click", async () => {
   if (!deferredPrompt) {
@@ -1792,14 +1865,18 @@ window.addEventListener("appinstalled", () => {
   installButton.textContent = "Установлено";
   installButton.disabled = true;
   installHint.textContent = "Приложение установлено.";
+  pwaStatus.textContent = "PWA установлено.";
   flashToast("Приложение установлено");
 });
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {
-      // offline mode is optional
-    });
+    navigator.serviceWorker
+      .register("./service-worker.js")
+      .then((registration) => registration.update())
+      .catch(() => {
+        // offline mode is optional
+      });
   });
 }
 

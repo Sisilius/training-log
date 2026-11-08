@@ -1,12 +1,12 @@
-﻿const CACHE = "training-log-v10";
+﻿const CACHE = "training-log-v11";
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=10",
-  "./app.js?v=10",
-  "./data.js?v=10",
-  "./config.js?v=10",
+  "./styles.css?v=11",
+  "./app.js?v=11",
+  "./data.js?v=11",
+  "./config.js?v=11",
   "./manifest.webmanifest",
   "./vendor/chart.umd.min.js",
   "./icons/icon-192.png",
@@ -18,7 +18,9 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(ASSETS))
+      .then((cache) =>
+        Promise.allSettled(ASSETS.map((url) => cache.add(url).catch(() => null)))
+      )
       .then(() => self.skipWaiting())
   );
 });

@@ -10,7 +10,7 @@
   <title>Дневник тренировок</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <header id="app-header" hidden>
@@ -204,6 +204,15 @@
         </div>
 
         <div class="card">
+          <h2>Диагностика установки</h2>
+          <p id="pwa-status" class="hint">Нажми «Проверить», чтобы увидеть состояние service worker, манифеста и install prompt.</p>
+          <div class="row">
+            <button id="pwa-check" class="secondary" type="button">Проверить</button>
+            <button id="pwa-reset" class="secondary" type="button">Сбросить кэш</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>Тема и шрифт</h2>
           <div class="row">
             <button id="theme-toggle-2" class="secondary" type="button">Светлая тема</button>
@@ -241,9 +250,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=10"></script>
-  <script src="data.js?v=10"></script>
+  <script src="config.js?v=11"></script>
+  <script src="data.js?v=11"></script>
   <script src="vendor/chart.umd.min.js"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
