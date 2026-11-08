@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru" data-theme="dark" data-font="normal">
 <head>
   <meta charset="utf-8">
@@ -9,7 +9,7 @@
   <title>Дневник тренировок</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <header id="app-header" hidden>
@@ -34,50 +34,177 @@
     </section>
 
     <section id="app-view" hidden>
-      <div class="toolbar">
-        <label class="date-label">
-          Дата
-          <input type="date" id="date">
-        </label>
-        <button id="autofill" type="button">Как в прошлый раз</button>
-        <button id="export" type="button">Экспорт CSV</button>
-        <button id="check" class="secondary" type="button">Проверить связь</button>
-      </div>
+      <nav class="tabs" id="tabs" aria-label="Разделы">
+        <button type="button" data-view="workout" class="active">Тренировка</button>
+        <button type="button" data-view="progress">Прогресс</button>
+        <button type="button" data-view="body">Тело</button>
+        <button type="button" data-view="goals">Цели</button>
+        <button type="button" data-view="more">Ещё</button>
+      </nav>
 
-      <div class="timer-bar" id="timer-bar">
-        <span class="timer-label">Отдых</span>
-        <span id="timer-display" class="timer-display">—</span>
-        <button type="button" class="timer-chip" data-seconds="60">60</button>
-        <button type="button" class="timer-chip" data-seconds="90">90</button>
-        <button type="button" class="timer-chip" data-seconds="120">120</button>
-        <button type="button" class="timer-chip" data-seconds="180">180</button>
-        <button id="timer-stop" class="secondary" type="button">Стоп</button>
-      </div>
+      <section id="view-workout" class="view">
+        <div class="toolbar">
+          <label class="date-label">
+            Дата
+            <input type="date" id="date">
+          </label>
+          <button id="autofill" type="button">Как в прошлый раз</button>
+          <button id="export" type="button">Экспорт CSV</button>
+          <button id="check" class="secondary" type="button">Проверить связь</button>
+        </div>
 
-      <p id="status" class="status" aria-live="polite"></p>
-      <div id="days"></div>
+        <div class="timer-bar" id="timer-bar">
+          <span class="timer-label">Отдых</span>
+          <span id="timer-display" class="timer-display">—</span>
+          <button type="button" class="timer-chip" data-seconds="60">60</button>
+          <button type="button" class="timer-chip" data-seconds="90">90</button>
+          <button type="button" class="timer-chip" data-seconds="120">120</button>
+          <button type="button" class="timer-chip" data-seconds="180">180</button>
+          <button id="timer-stop" class="secondary" type="button">Стоп</button>
+        </div>
 
-      <section class="extra">
-        <h2>Ещё</h2>
+        <p id="status" class="status" aria-live="polite"></p>
+        <div id="days"></div>
+      </section>
 
-        <div class="extra-card">
-          <h3>Установить на телефон</h3>
+      <section id="view-progress" class="view" hidden>
+        <p id="analytics-status" class="status" aria-live="polite"></p>
+
+        <div class="card">
+          <h2>Последние 7 дней</h2>
+          <div id="weekly-summary" class="summary-grid"></div>
+        </div>
+
+        <div class="card">
+          <h2>Рабочий вес</h2>
+          <label class="field-label">Упражнение
+            <select id="exercise-select"></select>
+          </label>
+          <div class="chart-wrap"><canvas id="exercise-chart"></canvas></div>
+        </div>
+
+        <div class="card">
+          <h2>Объём по датам</h2>
+          <div class="chart-wrap"><canvas id="volume-chart"></canvas></div>
+        </div>
+
+        <div class="card">
+          <h2>Боль в плече</h2>
+          <div class="chart-wrap"><canvas id="pain-chart"></canvas></div>
+        </div>
+
+        <div class="card">
+          <h2>Подсказки</h2>
+          <div id="recommendations" class="recommendations"></div>
+        </div>
+      </section>
+
+      <section id="view-body" class="view" hidden>
+        <div class="card">
+          <h2>Замеры</h2>
+          <form id="body-form" class="form-grid">
+            <label>Дата<input type="date" id="body-date" required></label>
+            <label>Вес, кг<input type="number" step="0.1" id="body-weight" inputmode="decimal" placeholder="100.0"></label>
+            <label>Живот, см<input type="number" step="0.5" id="body-waist" inputmode="decimal" placeholder="95"></label>
+            <label>Сон, ч<input type="number" step="0.5" id="body-sleep" inputmode="decimal" placeholder="8"></label>
+            <label>Настроение 1–5<input type="number" min="1" max="5" step="1" id="body-mood" inputmode="numeric" placeholder="4"></label>
+            <label>Сигарет за день<input type="number" min="0" step="1" id="body-smoking" inputmode="numeric" placeholder="1"></label>
+            <label class="full">Заметки<input type="text" id="body-notes" placeholder="самочувствие, аппетит"></label>
+            <button type="submit">Сохранить замер</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>Вес и живот</h2>
+          <div class="chart-wrap"><canvas id="weight-chart"></canvas></div>
+        </div>
+
+        <div class="card">
+          <h2>История замеров</h2>
+          <div id="body-history" class="history"></div>
+        </div>
+      </section>
+
+      <section id="view-goals" class="view" hidden>
+        <div class="card">
+          <h2>Отсчёт</h2>
+          <div id="countdown" class="countdown-grid"></div>
+          <form id="dates-form" class="form-grid">
+            <label>Дата ГТО<input type="date" id="gto-date"></label>
+            <label>Дата гонки<input type="date" id="race-date"></label>
+            <button type="submit">Сохранить даты</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>ГТО</h2>
+          <form id="gto-form" class="form-grid">
+            <label>Дата<input type="date" id="gto-test-date" required></label>
+            <label>Подтягивания<input type="number" min="0" step="1" id="gto-pullups" inputmode="numeric"></label>
+            <label>Отжимания<input type="number" min="0" step="1" id="gto-pushups" inputmode="numeric"></label>
+            <label>Пресс<input type="number" min="0" step="1" id="gto-situps" inputmode="numeric"></label>
+            <label>Наклон, см<input type="number" step="0.5" id="gto-bend" inputmode="decimal"></label>
+            <label>100 м, сек<input type="number" step="0.1" id="gto-sprint" inputmode="decimal"></label>
+            <label>3 км, мм:сс<input type="text" id="gto-run3" placeholder="12:30"></label>
+            <label class="full">Заметки<input type="text" id="gto-notes" placeholder="условия, самочувствие"></label>
+            <button type="submit">Сохранить тест</button>
+          </form>
+
+          <label class="field-label">График
+            <select id="gto-metric">
+              <option value="pullups">Подтягивания</option>
+              <option value="pushups">Отжимания</option>
+              <option value="situps">Пресс</option>
+              <option value="forward_bend_cm">Наклон, см</option>
+              <option value="sprint_100m_s">100 м, сек</option>
+              <option value="run_3km_s">3 км, сек</option>
+            </select>
+          </label>
+          <div class="chart-wrap"><canvas id="gto-chart"></canvas></div>
+          <div id="gto-history" class="history"></div>
+        </div>
+
+        <div class="card">
+          <h2>Бег</h2>
+          <form id="run-form" class="form-grid">
+            <label>Дата<input type="date" id="run-date" required></label>
+            <label>Дистанция, км<input type="number" step="0.1" id="run-distance" inputmode="decimal"></label>
+            <label>Время, мин<input type="number" step="0.1" id="run-duration" inputmode="decimal"></label>
+            <label>Средний пульс<input type="number" step="1" id="run-hr" inputmode="numeric"></label>
+            <label>Покрытие
+              <select id="run-surface">
+                <option value="treadmill">Дорожка</option>
+                <option value="outdoor">Улица</option>
+                <option value="other">Другое</option>
+              </select>
+            </label>
+            <label class="full">Заметки<input type="text" id="run-notes" placeholder="самочувствие, погода"></label>
+            <button type="submit">Сохранить пробежку</button>
+          </form>
+          <div class="chart-wrap"><canvas id="run-chart"></canvas></div>
+          <div id="run-history" class="history"></div>
+        </div>
+      </section>
+
+      <section id="view-more" class="view" hidden>
+        <div class="card">
+          <h2>Установить на телефон</h2>
           <p class="hint">Приложение откроется без браузерной панели и будет работать офлайн. Данные — в локальном кэше, синк — при связи.</p>
           <button id="install" type="button" hidden>Установить</button>
           <p id="install-hint" class="hint"></p>
         </div>
 
-        <div class="extra-card">
-          <h3>Тема и шрифт</h3>
+        <div class="card">
+          <h2>Тема и шрифт</h2>
           <div class="row">
             <button id="theme-toggle-2" class="secondary" type="button">Светлая тема</button>
             <button id="font-toggle" class="secondary" type="button">Крупный шрифт</button>
           </div>
         </div>
 
-        <div class="extra-card">
-          <h3>Резервная копия</h3>
-          <p class="hint">JSON — все тренировки. CSV — только текущий день.</p>
+        <div class="card">
+          <h2>Резервная копия</h2>
+          <p class="hint">JSON — все данные. CSV — только текущий день.</p>
           <div class="row">
             <button id="export-json" type="button">Скачать JSON</button>
             <label class="file-button">Импорт JSON<input id="import-json" type="file" accept="application/json" hidden></label>
@@ -85,8 +212,8 @@
           <p id="backup-status" class="hint"></p>
         </div>
 
-        <div class="extra-card">
-          <h3>Библиотека упражнений</h3>
+        <div class="card">
+          <h2>Библиотека упражнений</h2>
           <input id="library-search" type="search" placeholder="Поиск упражнения">
           <div id="library-list" class="library-list"></div>
         </div>
@@ -105,8 +232,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=7"></script>
-  <script src="data.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="config.js?v=9"></script>
+  <script src="data.js?v=9"></script>
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

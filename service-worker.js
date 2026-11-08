@@ -1,13 +1,14 @@
-const CACHE = "training-log-v7";
+﻿const CACHE = "training-log-v9";
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=7",
-  "./app.js?v=7",
-  "./data.js?v=7",
-  "./config.js?v=7",
+  "./styles.css?v=9",
+  "./app.js?v=9",
+  "./data.js?v=9",
+  "./config.js?v=9",
   "./manifest.webmanifest",
+  "./vendor/chart.umd.min.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png"
@@ -66,3 +67,4 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+

@@ -13,6 +13,11 @@
 - Тёмная/светлая тема и крупный шрифт.
 - Библиотека упражнений с техникой, ошибками и заменами.
 - PWA: установка на телефон и офлайн-оболочка.
+- Графики: рабочий вес, объём, боль в плече.
+- Замеры тела: вес, живот, сон, настроение, сигареты.
+- ГТО: тесты и график по выбранному показателю.
+- Бег: дистанция, время, пульс, покрытие.
+- Отсчёт до ГТО и гонки, недельная сводка и подсказки по прогрессии.
 - Бесплатный тариф Supabase: 500 МБ базы, 50 000 MAU, 5 ГБ egress.
 
 ## Шаг 1. Supabase
@@ -21,12 +26,13 @@
 2. Выбери регион поближе (например, Frankfurt).
 3. Дождись, пока проект поднимется.
 4. Открой **SQL Editor**, вставь содержимое `supabase/schema.sql` и нажми **Run**.
-5. Открой **Authentication → URL Configuration**:
+5. Затем вставь `supabase/schema_v2.sql` и тоже нажми **Run** — это таблицы замеров, ГТО и бега.
+6. Открой **Authentication → URL Configuration**:
    - **Site URL**: `https://<username>.github.io/training-log/`
    - **Redirect URLs**: добавь
      - `https://<username>.github.io/training-log/`
      - `http://localhost:8000/` (для локальной проверки)
-6. Открой **Project Settings → API** и скопируй:
+7. Открой **Project Settings → API** и скопируй:
    - **Project URL**
    - **anon public** key
 
@@ -106,6 +112,13 @@ data.js               — план тренировок и библиотека 
 config.js             — Project URL + anon key
 manifest.webmanifest  — PWA-манифест
 service-worker.js     — офлайн-кэш
+vendor/chart.umd.min.js — Chart.js (MIT), графики
 icons/                — иконки приложения
-supabase/schema.sql   — таблица, RLS, триггер
+supabase/schema.sql   — тренировки, RLS, триггер
+supabase/schema_v2.sql — замеры, ГТО, бег
 ```
+
+## Лицензии
+
+- Chart.js — MIT, https://www.chartjs.org/
+- Supabase JS — MIT.

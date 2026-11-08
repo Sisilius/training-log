@@ -10,6 +10,7 @@ const loginButton = document.getElementById("login-button");
 const authMessage = document.getElementById("auth-message");
 const userEmail = document.getElementById("user-email");
 const logoutButton = document.getElementById("logout");
+const tabs = document.getElementById("tabs");
 const dateInput = document.getElementById("date");
 const exportButton = document.getElementById("export");
 const exportJsonButton = document.getElementById("export-json");
@@ -18,6 +19,7 @@ const backupStatus = document.getElementById("backup-status");
 const autofillButton = document.getElementById("autofill");
 const checkButton = document.getElementById("check");
 const statusEl = document.getElementById("status");
+const analyticsStatus = document.getElementById("analytics-status");
 const daysEl = document.getElementById("days");
 const toast = document.getElementById("toast");
 const themeToggle = document.getElementById("theme-toggle");
@@ -33,15 +35,58 @@ const modalBody = document.getElementById("modal-body");
 const modalClose = document.getElementById("modal-close");
 const timerDisplay = document.getElementById("timer-display");
 const timerStop = document.getElementById("timer-stop");
+const weeklySummary = document.getElementById("weekly-summary");
+const exerciseSelect = document.getElementById("exercise-select");
+const recommendations = document.getElementById("recommendations");
+const bodyForm = document.getElementById("body-form");
+const bodyDate = document.getElementById("body-date");
+const bodyWeight = document.getElementById("body-weight");
+const bodyWaist = document.getElementById("body-waist");
+const bodySleep = document.getElementById("body-sleep");
+const bodyMood = document.getElementById("body-mood");
+const bodySmoking = document.getElementById("body-smoking");
+const bodyNotes = document.getElementById("body-notes");
+const bodyHistory = document.getElementById("body-history");
+const datesForm = document.getElementById("dates-form");
+const gtoDateInput = document.getElementById("gto-date");
+const raceDateInput = document.getElementById("race-date");
+const countdownEl = document.getElementById("countdown");
+const gtoForm = document.getElementById("gto-form");
+const gtoTestDate = document.getElementById("gto-test-date");
+const gtoPullups = document.getElementById("gto-pullups");
+const gtoPushups = document.getElementById("gto-pushups");
+const gtoSitups = document.getElementById("gto-situps");
+const gtoBend = document.getElementById("gto-bend");
+const gtoSprint = document.getElementById("gto-sprint");
+const gtoRun3 = document.getElementById("gto-run3");
+const gtoNotes = document.getElementById("gto-notes");
+const gtoMetricSelect = document.getElementById("gto-metric");
+const gtoHistory = document.getElementById("gto-history");
+const runForm = document.getElementById("run-form");
+const runDate = document.getElementById("run-date");
+const runDistance = document.getElementById("run-distance");
+const runDuration = document.getElementById("run-duration");
+const runHr = document.getElementById("run-hr");
+const runSurface = document.getElementById("run-surface");
+const runNotes = document.getElementById("run-notes");
+const runHistory = document.getElementById("run-history");
 
 const SETTINGS_KEY = "training-log-settings";
 
-const now = new Date();
-dateInput.value = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-  .toISOString()
-  .slice(0, 10);
+function todayIso() {
+  const value = new Date();
+  return new Date(value.getTime() - value.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+dateInput.value = todayIso();
+bodyDate.value = todayIso();
+gtoTestDate.value = todayIso();
+runDate.value = todayIso();
 
 let currentDate = dateInput.value;
+let currentView = "workout";
 let currentUser = null;
 let currentUserId = null;
 let state = new Map();
@@ -53,12 +98,26 @@ let timerEnd = 0;
 let audioCtx = null;
 let deferredPrompt = null;
 
-let settings = { theme: "dark", font: "normal" };
+const analytics = {
+  loaded: false,
+  workouts: [],
+  body: [],
+  gto: [],
+  runs: [],
+  errors: []
+};
+
+const charts = {};
+
+let settings = { theme: "dark", font: "normal", gtoDate: "", raceDate: "" };
 try {
   settings = { ...settings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
 } catch (_error) {
-  settings = { theme: "dark", font: "normal" };
+  settings = { theme: "dark", font: "normal", gtoDate: "", raceDate: "" };
 }
+
+gtoDateInput.value = settings.gtoDate || "";
+raceDateInput.value = settings.raceDate || "";
 
 const supabaseUrl = window.SUPABASE_URL || "";
 const supabaseAnonKey = window.SUPABASE_ANON_KEY || "";
@@ -73,6 +132,40 @@ const configured =
 const sb = configured
   ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
   : null;
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(String(value).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function average(values) {
+  const valid = values.filter((value) => Number.isFinite(value));
+  if (!valid.length) return null;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function formatDateShort(value) {
+  if (!value) return "—";
+  const [year, month, day] = value.split("-");
+  return `${day}.${month}`;
+}
+
+function parseTimeToSeconds(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (/^\d+$/.test(text)) return Number(text);
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function formatSeconds(value) {
+  if (!Number.isFinite(value)) return "—";
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.round(value % 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 function applySettings() {
   document.documentElement.dataset.theme = settings.theme;
@@ -97,6 +190,7 @@ function applySettings() {
 function toggleTheme() {
   settings.theme = settings.theme === "dark" ? "light" : "dark";
   applySettings();
+  if (analytics.loaded) renderCurrentView();
 }
 
 function toggleFont() {
@@ -315,6 +409,7 @@ async function saveRows(date, stateSnapshot, userId) {
   }
 
   clearCache(date);
+  analytics.loaded = false;
   const time = new Date().toLocaleTimeString("ru-RU", {
     hour: "2-digit",
     minute: "2-digit"
@@ -566,24 +661,701 @@ function renderLibrary(filter = "") {
   }
 }
 
+function parseSet(value) {
+  const match = String(value || "").match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+)/i);
+  if (!match) return null;
+  return {
+    weight: Number(match[1].replace(",", ".")),
+    reps: Number(match[2])
+  };
+}
+
+function statsForRow(row) {
+  const sets = [row.set1, row.set2, row.set3].map(parseSet).filter(Boolean);
+  if (!sets.length) return null;
+
+  const rpe = numberOrNull(row.rpe);
+  const pain = numberOrNull(row.pain);
+
+  return {
+    maxWeight: Math.max(...sets.map((set) => set.weight)),
+    volume: sets.reduce((sum, set) => sum + set.weight * set.reps, 0),
+    reps: sets.map((set) => set.reps),
+    rpe,
+    pain
+  };
+}
+
+function chartTheme() {
+  const light = document.documentElement.dataset.theme === "light";
+  return {
+    text: light ? "#334155" : "#c9d6ea",
+    grid: light ? "rgba(29, 78, 216, 0.12)" : "rgba(255, 255, 255, 0.08)",
+    accent: light ? "#1d4ed8" : "#8ab4f8",
+    green: light ? "#15803d" : "#4ade80",
+    orange: "#fb923c",
+    red: "#f87171"
+  };
+}
+
+function baseChartOptions() {
+  const colors = chartTheme();
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "rgba(15, 17, 21, 0.92)",
+        titleColor: "#fff",
+        bodyColor: "#e8eaed"
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: colors.text, maxRotation: 0, autoSkip: true },
+        grid: { color: colors.grid }
+      },
+      y: {
+        ticks: { color: colors.text },
+        grid: { color: colors.grid },
+        beginAtZero: true
+      }
+    }
+  };
+}
+
+function makeChart(key, canvasId, config) {
+  if (!window.Chart) return;
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (charts[key]) charts[key].destroy();
+  charts[key] = new Chart(canvas, config);
+}
+
+function renderExerciseSelect() {
+  const names = [
+    ...new Set(
+      analytics.workouts
+        .filter((row) => statsForRow(row))
+        .map((row) => row.exercise)
+    )
+  ].sort((a, b) => a.localeCompare(b, "ru"));
+
+  const previous = exerciseSelect.value;
+  exerciseSelect.innerHTML = "";
+  names.forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    exerciseSelect.appendChild(option);
+  });
+
+  if (previous && names.includes(previous)) exerciseSelect.value = previous;
+}
+
+function renderExerciseChart() {
+  const name = exerciseSelect.value;
+  if (!name) {
+    if (charts.exercise) {
+      charts.exercise.destroy();
+      delete charts.exercise;
+    }
+    return;
+  }
+
+  const rows = analytics.workouts.filter((row) => row.exercise === name && statsForRow(row));
+  const labels = rows.map((row) => formatDateShort(row.workout_date));
+  const values = rows.map((row) => statsForRow(row).maxWeight);
+  const colors = chartTheme();
+
+  makeChart("exercise", "exercise-chart", {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          data: values,
+          borderColor: colors.accent,
+          backgroundColor: "rgba(138, 180, 248, 0.15)",
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3
+        }
+      ]
+    },
+    options: baseChartOptions()
+  });
+}
+
+function renderVolumeChart() {
+  const byDate = new Map();
+  analytics.workouts.forEach((row) => {
+    const stats = statsForRow(row);
+    if (!stats) return;
+    byDate.set(row.workout_date, (byDate.get(row.workout_date) || 0) + stats.volume);
+  });
+
+  const dates = [...byDate.keys()].sort();
+  const colors = chartTheme();
+
+  makeChart("volume", "volume-chart", {
+    type: "bar",
+    data: {
+      labels: dates.map(formatDateShort),
+      datasets: [
+        {
+          data: dates.map((date) => Math.round(byDate.get(date))),
+          backgroundColor: colors.green,
+          borderRadius: 6
+        }
+      ]
+    },
+    options: baseChartOptions()
+  });
+}
+
+function renderPainChart() {
+  const byDate = new Map();
+  analytics.workouts.forEach((row) => {
+    const pain = numberOrNull(row.pain);
+    if (pain === null) return;
+    byDate.set(row.workout_date, Math.max(byDate.get(row.workout_date) || 0, pain));
+  });
+
+  const dates = [...byDate.keys()].sort();
+  const colors = chartTheme();
+
+  makeChart("pain", "pain-chart", {
+    type: "line",
+    data: {
+      labels: dates.map(formatDateShort),
+      datasets: [
+        {
+          data: dates.map((date) => byDate.get(date)),
+          borderColor: colors.red,
+          backgroundColor: "rgba(248, 113, 113, 0.15)",
+          fill: true,
+          tension: 0.2,
+          pointRadius: 3
+        }
+      ]
+    },
+    options: {
+      ...baseChartOptions(),
+      scales: {
+        ...baseChartOptions().scales,
+        y: {
+          ...baseChartOptions().scales.y,
+          suggestedMax: 10
+        }
+      }
+    }
+  });
+}
+
+function renderWeeklySummary() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 6);
+  const startIso = new Date(start.getTime() - start.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+  const endIso = new Date(end.getTime() - end.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+
+  const workouts = analytics.workouts.filter(
+    (row) => row.workout_date >= startIso && row.workout_date <= endIso
+  );
+  const dates = new Set(workouts.map((row) => row.workout_date));
+  const volume = workouts.reduce((sum, row) => {
+    const stats = statsForRow(row);
+    return sum + (stats ? stats.volume : 0);
+  }, 0);
+  const rpe = average(workouts.map((row) => numberOrNull(row.rpe)));
+  const pain = Math.max(
+    0,
+    ...workouts.map((row) => numberOrNull(row.pain) || 0)
+  );
+  const runs = analytics.runs.filter(
+    (row) => row.run_date >= startIso && row.run_date <= endIso
+  );
+  const distance = runs.reduce((sum, row) => sum + (numberOrNull(row.distance_km) || 0), 0);
+  const bodyRows = analytics.body.filter((row) => row.measured_on <= endIso);
+  const lastBody = bodyRows[bodyRows.length - 1];
+  const firstBody = bodyRows[0];
+  const weightDelta =
+    lastBody && firstBody ? numberOrNull(lastBody.weight_kg) - numberOrNull(firstBody.weight_kg) : null;
+
+  const items = [
+    [dates.size, "тренировок"],
+    [Math.round(volume), "кг объёма"],
+    [rpe === null ? "—" : rpe.toFixed(1), "средний RPE"],
+    [pain || "—", "макс. боль"],
+    [distance ? distance.toFixed(1) : "—", "км бега"],
+    [weightDelta === null ? "—" : `${weightDelta > 0 ? "+" : ""}${weightDelta.toFixed(1)}`, "кг за всё время"]
+  ];
+
+  weeklySummary.innerHTML = "";
+  items.forEach(([value, label]) => {
+    const item = document.createElement("div");
+    item.className = "summary-item";
+    const strong = document.createElement("b");
+    strong.textContent = value;
+    const span = document.createElement("span");
+    span.textContent = label;
+    item.append(strong, span);
+    weeklySummary.appendChild(item);
+  });
+}
+
+function renderRecommendations() {
+  const byExercise = new Map();
+
+  analytics.workouts.forEach((row) => {
+    const stats = statsForRow(row);
+    if (!stats) return;
+    if (!byExercise.has(row.exercise)) byExercise.set(row.exercise, []);
+    byExercise.get(row.exercise).push({ date: row.workout_date, stats, plan: row.plan });
+  });
+
+  const hints = [];
+
+  byExercise.forEach((entries, name) => {
+    entries.sort((a, b) => a.date.localeCompare(b.date));
+    const last = entries[entries.length - 1];
+    if (!last) return;
+
+    const planMatch = String(last.plan || "").match(/(\d+)\s*[–-]\s*(\d+)/);
+    const topReps = planMatch ? Number(planMatch[2]) : null;
+    const allTop = topReps && last.stats.reps.every((reps) => reps >= topReps);
+
+    if (last.stats.pain !== null && last.stats.pain >= 4) {
+      hints.push(`⚠️ ${name}: боль ${last.stats.pain}/10. Снизь вес или амплитуду.`);
+    } else if (allTop && (last.stats.rpe === null || last.stats.rpe <= 8)) {
+      const lowerBody = /ног|присед|тяга|ягод/i.test(name);
+      hints.push(`✅ ${name}: все подходы на верхней границе. Можно +${lowerBody ? 5 : 2.5} кг.`);
+    } else if (last.stats.rpe !== null && last.stats.rpe >= 9) {
+      hints.push(`🟡 ${name}: RPE ${last.stats.rpe}. Не добавляй вес, сначала техника.`);
+    }
+  });
+
+  if (!hints.length) {
+    hints.push("Пока мало данных. Заполни 2–3 тренировки — появятся подсказки.");
+  }
+
+  recommendations.innerHTML = "";
+  hints.slice(0, 8).forEach((text) => {
+    const item = document.createElement("div");
+    item.className = "recommendation";
+    item.textContent = text;
+    recommendations.appendChild(item);
+  });
+}
+
+function renderProgress() {
+  renderWeeklySummary();
+  renderExerciseSelect();
+  renderExerciseChart();
+  renderVolumeChart();
+  renderPainChart();
+  renderRecommendations();
+}
+
+function historyRow(left, right) {
+  const row = document.createElement("div");
+  row.className = "history-row";
+  const first = document.createElement("span");
+  first.textContent = left;
+  const second = document.createElement("span");
+  second.textContent = right;
+  row.append(first, second);
+  return row;
+}
+
+function renderBody() {
+  const rows = analytics.body.slice().sort((a, b) => a.measured_on.localeCompare(b.measured_on));
+  const labels = rows.map((row) => formatDateShort(row.measured_on));
+  const weights = rows.map((row) => numberOrNull(row.weight_kg));
+  const waists = rows.map((row) => numberOrNull(row.waist_cm));
+  const colors = chartTheme();
+
+  makeChart("weight", "weight-chart", {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Вес, кг",
+          data: weights,
+          borderColor: colors.accent,
+          backgroundColor: "rgba(138, 180, 248, 0.12)",
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+          yAxisID: "y"
+        },
+        {
+          label: "Живот, см",
+          data: waists,
+          borderColor: colors.orange,
+          tension: 0.25,
+          pointRadius: 3,
+          yAxisID: "y1"
+        }
+      ]
+    },
+    options: {
+      ...baseChartOptions(),
+      plugins: { legend: { display: true, labels: { color: colors.text } } },
+      scales: {
+        x: baseChartOptions().scales.x,
+        y: {
+          ...baseChartOptions().scales.y,
+          position: "left"
+        },
+        y1: {
+          ...baseChartOptions().scales.y,
+          position: "right",
+          grid: { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+
+  bodyHistory.innerHTML = "";
+  rows
+    .slice()
+    .reverse()
+    .slice(0, 12)
+    .forEach((row) => {
+      const parts = [
+        row.weight_kg ? `${row.weight_kg} кг` : null,
+        row.waist_cm ? `${row.waist_cm} см` : null,
+        row.sleep_hours ? `сон ${row.sleep_hours} ч` : null,
+        row.mood ? `настроение ${row.mood}/5` : null
+      ].filter(Boolean);
+      bodyHistory.appendChild(historyRow(row.measured_on, parts.join(" · ") || "—"));
+    });
+
+  if (!rows.length) bodyHistory.appendChild(historyRow("Пока нет замеров", "—"));
+}
+
+function renderCountdown() {
+  const items = [
+    ["ГТО", settings.gtoDate],
+    ["Гонка", settings.raceDate]
+  ];
+
+  countdownEl.innerHTML = "";
+  items.forEach(([label, date]) => {
+    const item = document.createElement("div");
+    item.className = "countdown-item";
+    const strong = document.createElement("b");
+    const span = document.createElement("span");
+    span.textContent = label;
+
+    if (!date) {
+      strong.textContent = "—";
+      span.textContent = `${label}: укажи дату`;
+    } else {
+      const target = new Date(date + "T00:00:00");
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+      strong.textContent = days >= 0 ? days : "0";
+      span.textContent = days >= 0 ? `${label}: дней` : `${label}: дата прошла`;
+    }
+
+    item.append(strong, span);
+    countdownEl.appendChild(item);
+  });
+}
+
+function renderGto() {
+  const rows = analytics.gto.slice().sort((a, b) => a.tested_on.localeCompare(b.tested_on));
+  const metric = gtoMetricSelect.value;
+  const labels = rows.map((row) => formatDateShort(row.tested_on));
+  const values = rows.map((row) => numberOrNull(row[metric]));
+  const colors = chartTheme();
+
+  makeChart("gto", "gto-chart", {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          data: values,
+          borderColor: colors.green,
+          backgroundColor: "rgba(74, 222, 128, 0.15)",
+          fill: true,
+          tension: 0.2,
+          pointRadius: 3
+        }
+      ]
+    },
+    options: baseChartOptions()
+  });
+
+  gtoHistory.innerHTML = "";
+  rows
+    .slice()
+    .reverse()
+    .slice(0, 12)
+    .forEach((row) => {
+      const parts = [
+        row.pullups ? `подт. ${row.pullups}` : null,
+        row.pushups ? `отж. ${row.pushups}` : null,
+        row.situps ? `пресс ${row.situps}` : null,
+        row.forward_bend_cm ? `наклон ${row.forward_bend_cm} см` : null,
+        row.sprint_100m_s ? `100 м ${row.sprint_100m_s} с` : null,
+        row.run_3km_s ? `3 км ${formatSeconds(row.run_3km_s)}` : null
+      ].filter(Boolean);
+      gtoHistory.appendChild(historyRow(row.tested_on, parts.join(" · ") || "—"));
+    });
+
+  if (!rows.length) gtoHistory.appendChild(historyRow("Пока нет тестов", "—"));
+}
+
+function renderRuns() {
+  const rows = analytics.runs.slice().sort((a, b) => a.run_date.localeCompare(b.run_date));
+  const weeks = new Map();
+
+  rows.forEach((row) => {
+    const date = new Date(row.run_date + "T00:00:00");
+    const day = (date.getDay() + 6) % 7;
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - day);
+    const key = new Date(monday.getTime() - monday.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+    weeks.set(key, (weeks.get(key) || 0) + (numberOrNull(row.distance_km) || 0));
+  });
+
+  const labels = [...weeks.keys()].sort();
+  const colors = chartTheme();
+
+  makeChart("run", "run-chart", {
+    type: "bar",
+    data: {
+      labels: labels.map(formatDateShort),
+      datasets: [
+        {
+          data: labels.map((key) => Number(weeks.get(key).toFixed(1))),
+          backgroundColor: colors.orange,
+          borderRadius: 6
+        }
+      ]
+    },
+    options: baseChartOptions()
+  });
+
+  runHistory.innerHTML = "";
+  rows
+    .slice()
+    .reverse()
+    .slice(0, 12)
+    .forEach((row) => {
+      const parts = [
+        row.distance_km ? `${row.distance_km} км` : null,
+        row.duration_min ? `${row.duration_min} мин` : null,
+        row.avg_hr ? `${row.avg_hr} уд/мин` : null,
+        row.surface === "treadmill" ? "дорожка" : row.surface === "outdoor" ? "улица" : null
+      ].filter(Boolean);
+      runHistory.appendChild(historyRow(row.run_date, parts.join(" · ") || "—"));
+    });
+
+  if (!rows.length) runHistory.appendChild(historyRow("Пока нет пробежек", "—"));
+}
+
+function renderGoals() {
+  renderCountdown();
+  renderGto();
+  renderRuns();
+}
+
+function renderCurrentView() {
+  if (currentView === "progress") renderProgress();
+  if (currentView === "body") renderBody();
+  if (currentView === "goals") renderGoals();
+}
+
+async function loadAnalytics(force = false) {
+  if (!currentUser || !sb) return;
+  if (analytics.loaded && !force) return;
+
+  analyticsStatus.textContent = "Загружаю данные...";
+
+  const [workoutsResult, bodyResult, gtoResult, runsResult] = await Promise.all([
+    sb.from("workouts").select("*").order("workout_date", { ascending: true }).limit(5000),
+    sb.from("body_metrics").select("*").order("measured_on", { ascending: true }).limit(1000),
+    sb.from("gto_tests").select("*").order("tested_on", { ascending: true }).limit(1000),
+    sb.from("runs").select("*").order("run_date", { ascending: true }).limit(1000)
+  ]);
+
+  analytics.workouts = workoutsResult.data || [];
+  analytics.body = bodyResult.data || [];
+  analytics.gto = gtoResult.data || [];
+  analytics.runs = runsResult.data || [];
+  analytics.errors = [workoutsResult.error, bodyResult.error, gtoResult.error, runsResult.error]
+    .filter(Boolean)
+    .map((error) => error.message);
+  analytics.loaded = analytics.errors.length === 0;
+
+  if (analytics.errors.length) {
+    analyticsStatus.textContent =
+      "Не все таблицы доступны. Выполни supabase/schema_v2.sql в SQL Editor. " +
+      analytics.errors[0];
+  } else {
+    analyticsStatus.textContent = "";
+  }
+}
+
+async function switchView(view) {
+  currentView = view;
+
+  tabs.querySelectorAll("button[data-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === view);
+  });
+
+  document.querySelectorAll(".view").forEach((section) => {
+    section.hidden = section.id !== `view-${view}`;
+  });
+
+  if (view === "progress" || view === "body" || view === "goals") {
+    await loadAnalytics();
+    renderCurrentView();
+  }
+}
+
+async function saveBody(event) {
+  event.preventDefault();
+  if (!currentUser || !sb) return;
+
+  const row = {
+    user_id: currentUser.id,
+    measured_on: bodyDate.value,
+    weight_kg: numberOrNull(bodyWeight.value),
+    waist_cm: numberOrNull(bodyWaist.value),
+    sleep_hours: numberOrNull(bodySleep.value),
+    mood: numberOrNull(bodyMood.value),
+    smoking: numberOrNull(bodySmoking.value),
+    notes: bodyNotes.value.trim() || null
+  };
+
+  if (!row.measured_on) return;
+
+  const { error } = await sb.from("body_metrics").upsert(row, {
+    onConflict: "user_id,measured_on"
+  });
+
+  if (error) {
+    flashToast("Ошибка замера: " + error.message, 4000);
+    return;
+  }
+
+  flashToast("Замер сохранён");
+  bodyForm.reset();
+  bodyDate.value = todayIso();
+  await loadAnalytics(true);
+  renderBody();
+}
+
+async function saveGto(event) {
+  event.preventDefault();
+  if (!currentUser || !sb) return;
+
+  const row = {
+    user_id: currentUser.id,
+    tested_on: gtoTestDate.value,
+    pullups: numberOrNull(gtoPullups.value),
+    pushups: numberOrNull(gtoPushups.value),
+    situps: numberOrNull(gtoSitups.value),
+    forward_bend_cm: numberOrNull(gtoBend.value),
+    sprint_100m_s: numberOrNull(gtoSprint.value),
+    run_3km_s: parseTimeToSeconds(gtoRun3.value),
+    notes: gtoNotes.value.trim() || null
+  };
+
+  if (!row.tested_on) return;
+
+  const { error } = await sb.from("gto_tests").upsert(row, {
+    onConflict: "user_id,tested_on"
+  });
+
+  if (error) {
+    flashToast("Ошибка теста: " + error.message, 4000);
+    return;
+  }
+
+  flashToast("Тест сохранён");
+  gtoForm.reset();
+  gtoTestDate.value = todayIso();
+  await loadAnalytics(true);
+  renderGto();
+}
+
+async function saveRun(event) {
+  event.preventDefault();
+  if (!currentUser || !sb) return;
+
+  const row = {
+    user_id: currentUser.id,
+    run_date: runDate.value,
+    distance_km: numberOrNull(runDistance.value),
+    duration_min: numberOrNull(runDuration.value),
+    avg_hr: numberOrNull(runHr.value),
+    surface: runSurface.value,
+    notes: runNotes.value.trim() || null
+  };
+
+  if (!row.run_date) return;
+
+  const { error } = await sb.from("runs").upsert(row, {
+    onConflict: "user_id,run_date,distance_km,duration_min"
+  });
+
+  if (error) {
+    flashToast("Ошибка пробежки: " + error.message, 4000);
+    return;
+  }
+
+  flashToast("Пробежка сохранена");
+  runForm.reset();
+  runDate.value = todayIso();
+  await loadAnalytics(true);
+  renderRuns();
+}
+
+function saveDates(event) {
+  event.preventDefault();
+  settings.gtoDate = gtoDateInput.value;
+  settings.raceDate = raceDateInput.value;
+  applySettings();
+  renderCountdown();
+  flashToast("Даты сохранены");
+}
+
 async function exportJson() {
   if (!currentUser || !sb) return;
 
   setBackupStatus("Готовлю JSON...");
-  const { data, error } = await sb
-    .from("workouts")
-    .select("*")
-    .order("workout_date", { ascending: true });
-
-  if (error) {
-    setBackupStatus("Ошибка: " + error.message);
-    return;
-  }
+  const [workoutsResult, bodyResult, gtoResult, runsResult] = await Promise.all([
+    sb.from("workouts").select("*").order("workout_date", { ascending: true }),
+    sb.from("body_metrics").select("*").order("measured_on", { ascending: true }),
+    sb.from("gto_tests").select("*").order("tested_on", { ascending: true }),
+    sb.from("runs").select("*").order("run_date", { ascending: true })
+  ]);
 
   const payload = {
-    version: 1,
+    version: 2,
     exported_at: new Date().toISOString(),
-    workouts: data || []
+    workouts: workoutsResult.data || [],
+    body_metrics: bodyResult.data || [],
+    gto_tests: gtoResult.data || [],
+    runs: runsResult.data || []
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -595,7 +1367,9 @@ async function exportJson() {
   link.download = `training-backup-${currentDate}.json`;
   link.click();
   URL.revokeObjectURL(url);
-  setBackupStatus(`Скачано записей: ${(data || []).length}`);
+  setBackupStatus(
+    `Скачано: тренировки ${payload.workouts.length}, замеры ${payload.body_metrics.length}, ГТО ${payload.gto_tests.length}, бег ${payload.runs.length}`
+  );
 }
 
 async function importJson(file) {
@@ -610,14 +1384,22 @@ async function importJson(file) {
     return;
   }
 
-  const rows = Array.isArray(payload) ? payload : payload?.workouts;
-  if (!Array.isArray(rows)) {
+  const workouts = Array.isArray(payload) ? payload : payload?.workouts;
+  if (!Array.isArray(workouts)) {
     setBackupStatus("В файле нет массива workouts.");
     return;
   }
 
-  const clean = rows
-    .map((row) => ({
+  if (!confirm("Импортировать данные из файла? Совпадающие даты будут обновлены.")) {
+    setBackupStatus("Импорт отменён.");
+    return;
+  }
+
+  const job = {
+    table: "workouts",
+    rows: workouts,
+    conflict: "user_id,workout_date,day,exercise",
+    map: (row) => ({
       user_id: currentUser.id,
       workout_date: row.workout_date,
       day: row.day,
@@ -629,32 +1411,94 @@ async function importJson(file) {
       rpe: row.rpe || null,
       pain: row.pain || null,
       notes: row.notes || null
-    }))
-    .filter((row) => row.workout_date && row.day && row.exercise);
+    }),
+    valid: (row) => row.workout_date && row.day && row.exercise
+  };
 
-  if (!clean.length) {
+  const cleanWorkouts = job.rows.map(job.map).filter(job.valid);
+  if (!cleanWorkouts.length) {
     setBackupStatus("Нет корректных строк для импорта.");
     return;
   }
 
-  if (!confirm(`Импортировать ${clean.length} строк?`)) {
-    setBackupStatus("Импорт отменён.");
-    return;
-  }
-
-  for (let index = 0; index < clean.length; index += 100) {
-    const chunk = clean.slice(index, index + 100);
-    const { error } = await sb.from("workouts").upsert(chunk, {
-      onConflict: "user_id,workout_date,day,exercise"
-    });
+  for (let index = 0; index < cleanWorkouts.length; index += 100) {
+    const chunk = cleanWorkouts.slice(index, index + 100);
+    const { error } = await sb.from("workouts").upsert(chunk, { onConflict: job.conflict });
     if (error) {
-      setBackupStatus("Ошибка импорта: " + error.message);
+      setBackupStatus("Ошибка импорта тренировок: " + error.message);
       return;
     }
   }
 
-  setBackupStatus(`Импортировано строк: ${clean.length}`);
+  const extraJobs = [
+    {
+      table: "body_metrics",
+      rows: payload?.body_metrics,
+      conflict: "user_id,measured_on",
+      map: (row) => ({
+        user_id: currentUser.id,
+        measured_on: row.measured_on,
+        weight_kg: row.weight_kg || null,
+        waist_cm: row.waist_cm || null,
+        sleep_hours: row.sleep_hours || null,
+        mood: row.mood || null,
+        smoking: row.smoking || null,
+        notes: row.notes || null
+      }),
+      valid: (row) => row.measured_on
+    },
+    {
+      table: "gto_tests",
+      rows: payload?.gto_tests,
+      conflict: "user_id,tested_on",
+      map: (row) => ({
+        user_id: currentUser.id,
+        tested_on: row.tested_on,
+        pullups: row.pullups || null,
+        pushups: row.pushups || null,
+        situps: row.situps || null,
+        forward_bend_cm: row.forward_bend_cm || null,
+        sprint_100m_s: row.sprint_100m_s || null,
+        run_3km_s: row.run_3km_s || null,
+        notes: row.notes || null
+      }),
+      valid: (row) => row.tested_on
+    },
+    {
+      table: "runs",
+      rows: payload?.runs,
+      conflict: "user_id,run_date,distance_km,duration_min",
+      map: (row) => ({
+        user_id: currentUser.id,
+        run_date: row.run_date,
+        distance_km: row.distance_km || null,
+        duration_min: row.duration_min || null,
+        avg_hr: row.avg_hr || null,
+        surface: row.surface || null,
+        notes: row.notes || null
+      }),
+      valid: (row) => row.run_date
+    }
+  ];
+
+  for (const extra of extraJobs) {
+    if (!Array.isArray(extra.rows) || !extra.rows.length) continue;
+    const clean = extra.rows.map(extra.map).filter(extra.valid);
+    for (let index = 0; index < clean.length; index += 100) {
+      const chunk = clean.slice(index, index + 100);
+      const { error } = await sb.from(extra.table).upsert(chunk, {
+        onConflict: extra.conflict
+      });
+      if (error) {
+        setBackupStatus(`Ошибка импорта ${extra.table}: ` + error.message);
+        return;
+      }
+    }
+  }
+
+  setBackupStatus(`Импортировано тренировок: ${cleanWorkouts.length}`);
   flashToast("Импорт завершён");
+  analytics.loaded = false;
   await loadForDate();
 }
 
@@ -673,6 +1517,8 @@ function applySession(session) {
     appHeader.hidden = false;
     userEmail.textContent = currentUser.email || "";
     currentDate = dateInput.value;
+    analytics.loaded = false;
+    switchView("workout");
     loadForDate();
   } else {
     authView.hidden = false;
@@ -739,7 +1585,13 @@ daysEl.addEventListener("click", (event) => {
 dateInput.addEventListener("change", async () => {
   await flushSave();
   currentDate = dateInput.value;
+  analytics.loaded = false;
   await loadForDate();
+});
+
+tabs.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-view]");
+  if (button) switchView(button.dataset.view);
 });
 
 exportButton.addEventListener("click", exportCsv);
@@ -753,6 +1605,12 @@ autofillButton.addEventListener("click", autofillLastWorkout);
 themeToggle.addEventListener("click", toggleTheme);
 themeToggle2.addEventListener("click", toggleTheme);
 fontToggle.addEventListener("click", toggleFont);
+exerciseSelect.addEventListener("change", renderExerciseChart);
+gtoMetricSelect.addEventListener("change", renderGto);
+bodyForm.addEventListener("submit", saveBody);
+gtoForm.addEventListener("submit", saveGto);
+runForm.addEventListener("submit", saveRun);
+datesForm.addEventListener("submit", saveDates);
 
 document.querySelectorAll(".timer-chip").forEach((button) => {
   button.addEventListener("click", () => startRestTimer(Number(button.dataset.seconds)));
@@ -876,6 +1734,7 @@ async function init() {
   applySettings();
   renderPlan();
   renderLibrary();
+  renderCountdown();
 
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
