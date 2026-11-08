@@ -1,49 +1,5 @@
-const PLAN = [
-  {
-    id: "mon",
-    title: "Понедельник — низ + жим + тяга",
-    subtitle: "Основная силовая. Кардио — велотренажёр.",
-    items: [
-      { name: "Жим ноги в платформе", target: "3×10–12", note: "Двумя ногами. Стопы на середине, колени по носкам, таз прижат." },
-      { name: "Горизонтальный жим сидя в тренажёре", target: "3×8–12", note: "Вместо штанги лёжа. Рукоятки на уровне сосков, локти ~45°, без боли." },
-      { name: "Тяга горизонтального блока к поясу", target: "3×10–12", note: "К низу живота, лопатки своди." },
-      { name: "Гиперэкстензия", target: "3×12–15", note: "Спина нейтральная, без переразгибания." },
-      { name: "Разведение резины перед грудью", target: "2×15–20", isNew: true, note: "Лопатки своди, плечо не болит." },
-      { name: "Планка", target: "3×20–30 сек", note: "Поясница не провисает." },
-      { name: "Велотренажёр", target: "25 мин Z2", cardio: true, note: "Пульс 115–135, можешь говорить." }
-    ]
-  },
-  {
-    id: "wed",
-    title: "Среда — верх + ноги",
-    subtitle: "Легче, чем понедельник. Кардио — эллипс.",
-    items: [
-      { name: "Присед в Смите", target: "3×10–12", note: "Легко, до параллели, колени по носкам." },
-      { name: "Тяга верхнего блока средним хватом", target: "3×10–12", note: "К верхней груди, не за голову." },
-      { name: "«Бабочка»", target: "3×10–12", note: "Очень легко, не до полного разведения. Больно — пропусти." },
-      { name: "Тяга горизонтального блока к поясу", target: "3×10–12" },
-      { name: "Подъём на носки сидя", target: "3×15–20" },
-      { name: "Подъём на носки на жиме ноги", target: "2×12–15", isNew: true, note: "Носки на краю платформы, ноги почти прямые." },
-      { name: "Наружная ротация с резиной", target: "2×12–15", note: "Локоть прижат, боль не больше 2–3/10." },
-      { name: "«Птица-собака»", target: "3×10/сторону" },
-      { name: "Эллипс", target: "25 мин Z2", cardio: true, note: "Пульс 115–135." }
-    ]
-  },
-  {
-    id: "fri",
-    title: "Пятница — фулбоди + хват",
-    subtitle: "Кардио — дорожка: бег/шаг.",
-    items: [
-      { name: "Подтягивания в ассисте", target: "3×5–8", isNew: true, note: "Подбери противовес. Опускание 3 секунды, без раскачки." },
-      { name: "Отжимания", target: "3×8–15", note: "С опорой, если тяжело." },
-      { name: "Жим ноги одной ногой", target: "3×10–12/ногу", isNew: true, note: "Очень лёгкий вес, колено по носку, не в замок." },
-      { name: "Фермерская прогулка", target: "3×30–40 м", isNew: true, note: "Спина прямая, плечи не заваливай." },
-      { name: "Трицепс на блоке", target: "2–3×12–15" },
-      { name: "Молотки", target: "2×12" },
-      { name: "Дорожка: бег/шаг", target: "5 мин шаг + 15–20 мин", cardio: true, note: "1 мин бег / 2 мин шаг, наклон 1%." }
-    ]
-  }
-];
+const PLAN = window.PLAN || [];
+const LIBRARY = window.EXERCISE_LIBRARY || {};
 
 const appHeader = document.getElementById("app-header");
 const authView = document.getElementById("auth-view");
@@ -56,10 +12,29 @@ const userEmail = document.getElementById("user-email");
 const logoutButton = document.getElementById("logout");
 const dateInput = document.getElementById("date");
 const exportButton = document.getElementById("export");
+const exportJsonButton = document.getElementById("export-json");
+const importJsonInput = document.getElementById("import-json");
+const backupStatus = document.getElementById("backup-status");
+const autofillButton = document.getElementById("autofill");
 const checkButton = document.getElementById("check");
 const statusEl = document.getElementById("status");
 const daysEl = document.getElementById("days");
 const toast = document.getElementById("toast");
+const themeToggle = document.getElementById("theme-toggle");
+const themeToggle2 = document.getElementById("theme-toggle-2");
+const fontToggle = document.getElementById("font-toggle");
+const installButton = document.getElementById("install");
+const installHint = document.getElementById("install-hint");
+const librarySearch = document.getElementById("library-search");
+const libraryList = document.getElementById("library-list");
+const modal = document.getElementById("modal");
+const modalTitle = document.getElementById("modal-title");
+const modalBody = document.getElementById("modal-body");
+const modalClose = document.getElementById("modal-close");
+const timerDisplay = document.getElementById("timer-display");
+const timerStop = document.getElementById("timer-stop");
+
+const SETTINGS_KEY = "training-log-settings";
 
 const now = new Date();
 dateInput.value = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
@@ -73,6 +48,17 @@ let state = new Map();
 let saveTimer = null;
 let saveChain = Promise.resolve();
 let toastTimer = null;
+let timerInterval = null;
+let timerEnd = 0;
+let audioCtx = null;
+let deferredPrompt = null;
+
+let settings = { theme: "dark", font: "normal" };
+try {
+  settings = { ...settings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+} catch (_error) {
+  settings = { theme: "dark", font: "normal" };
+}
 
 const supabaseUrl = window.SUPABASE_URL || "";
 const supabaseAnonKey = window.SUPABASE_ANON_KEY || "";
@@ -88,6 +74,36 @@ const sb = configured
   ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+function applySettings() {
+  document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.dataset.font = settings.font;
+
+  themeToggle.textContent = settings.theme === "dark" ? "☀️" : "🌙";
+  themeToggle2.textContent = settings.theme === "dark" ? "Светлая тема" : "Тёмная тема";
+  fontToggle.textContent = settings.font === "large" ? "Обычный шрифт" : "Крупный шрифт";
+
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) {
+    themeColor.setAttribute("content", settings.theme === "dark" ? "#0f1115" : "#f4f6fa");
+  }
+
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (_error) {
+    // ignore
+  }
+}
+
+function toggleTheme() {
+  settings.theme = settings.theme === "dark" ? "light" : "dark";
+  applySettings();
+}
+
+function toggleFont() {
+  settings.font = settings.font === "large" ? "normal" : "large";
+  applySettings();
+}
+
 function makeInput(dayId, exerciseName, field, placeholder) {
   const input = document.createElement("input");
   input.type = "text";
@@ -96,9 +112,7 @@ function makeInput(dayId, exerciseName, field, placeholder) {
   input.dataset.field = field;
   input.placeholder = placeholder;
   input.autocomplete = "off";
-  if (field === "rpe" || field === "pain") {
-    input.inputMode = "decimal";
-  }
+  if (field === "rpe" || field === "pain") input.inputMode = "decimal";
   return input;
 }
 
@@ -122,13 +136,27 @@ function renderPlan() {
 
       const top = document.createElement("div");
       top.className = "ex-top";
+
       const name = document.createElement("span");
       name.className = "name";
       name.textContent = item.name + (item.isNew ? " 🆕" : "");
+
+      const right = document.createElement("span");
+      right.className = "ex-right";
+
       const target = document.createElement("span");
       target.className = "target";
       target.textContent = item.target;
-      top.append(name, target);
+
+      const info = document.createElement("button");
+      info.type = "button";
+      info.className = "info";
+      info.dataset.ex = item.name;
+      info.textContent = "i";
+      info.setAttribute("aria-label", `Описание: ${item.name}`);
+
+      right.append(target, info);
+      top.append(name, right);
       card.appendChild(top);
 
       if (item.cardio) {
@@ -195,6 +223,10 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
+function setBackupStatus(text) {
+  backupStatus.textContent = text;
+}
+
 function flashToast(text, duration = 2200) {
   toast.textContent = text;
   toast.classList.add("show");
@@ -210,7 +242,7 @@ function cacheState(date, stateSnapshot) {
   try {
     localStorage.setItem(cacheKey(date), JSON.stringify(Object.fromEntries(stateSnapshot)));
   } catch (_error) {
-    // localStorage may be unavailable; the in-memory state is still intact.
+    // ignore
   }
 }
 
@@ -268,9 +300,7 @@ async function saveRows(date, stateSnapshot, userId) {
     });
   } catch (error) {
     cacheState(date, stateSnapshot);
-    setStatus(
-      "Нет связи с Supabase. Данные сохранены локально. Нажми «Проверить связь»."
-    );
+    setStatus("Нет связи с Supabase. Данные сохранены локально. Нажми «Проверить связь».");
     return;
   }
 
@@ -367,6 +397,267 @@ async function loadForDate() {
   setStatus(data && data.length ? "Загружено" : "Новая дата");
 }
 
+function hasAnyValue() {
+  return [...state.values()].some(
+    (entry) => entry.set1 || entry.set2 || entry.set3 || entry.rpe || entry.pain
+  );
+}
+
+async function autofillLastWorkout() {
+  if (!currentUser || !sb) return;
+
+  setStatus("Ищу прошлую тренировку...");
+  const { data, error } = await sb
+    .from("workouts")
+    .select("*")
+    .lt("workout_date", currentDate)
+    .order("workout_date", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    setStatus("Ошибка загрузки прошлой тренировки: " + error.message);
+    return;
+  }
+
+  if (!data || !data.length) {
+    setStatus("Прошлых тренировок нет.");
+    flashToast("Прошлых тренировок нет");
+    return;
+  }
+
+  const lastDate = data[0].workout_date;
+  const rows = data.filter((row) => row.workout_date === lastDate);
+
+  if (hasAnyValue() && !confirm(`Заменить текущие значения данными за ${lastDate}?`)) {
+    return;
+  }
+
+  rows.forEach((row) => {
+    if (!row.day || !row.exercise) return;
+    state.set(keyFor(row.day, row.exercise), {
+      set1: row.set1 || "",
+      set2: row.set2 || "",
+      set3: row.set3 || "",
+      rpe: row.rpe || "",
+      pain: row.pain || ""
+    });
+  });
+
+  fillInputs();
+  scheduleSave();
+  setStatus(`Заполнено из ${lastDate}`);
+  flashToast(`Заполнено из ${lastDate}`, 2600);
+}
+
+function formatTimer(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function ensureAudio() {
+  if (!audioCtx) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtor) audioCtx = new AudioCtor();
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+}
+
+function beep() {
+  try {
+    ensureAudio();
+    if (!audioCtx) return;
+    const oscillator = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    oscillator.connect(gain);
+    gain.connect(audioCtx.destination);
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.08;
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.25);
+  } catch (_error) {
+    // sound is optional
+  }
+}
+
+function startRestTimer(seconds) {
+  clearInterval(timerInterval);
+  ensureAudio();
+  timerEnd = Date.now() + seconds * 1000;
+  timerDisplay.textContent = formatTimer(seconds);
+  flashToast(`Отдых ${seconds} сек`, 1200);
+
+  timerInterval = setInterval(() => {
+    const left = Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
+    timerDisplay.textContent = formatTimer(left);
+
+    if (left <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      timerEnd = 0;
+      timerDisplay.textContent = "Готово";
+      beep();
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      flashToast("Отдых закончен", 3000);
+    }
+  }, 250);
+}
+
+function stopRestTimer() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  timerEnd = 0;
+  timerDisplay.textContent = "—";
+}
+
+function openLibrary(name) {
+  const info = LIBRARY[name] || {};
+  const planItem = PLAN.flatMap((day) => day.items).find((item) => item.name === name);
+
+  modalTitle.textContent = name;
+  modalBody.innerHTML = "";
+
+  const sections = [
+    ["Зачем", info.muscles],
+    ["Техника", info.cues],
+    ["Ошибки", info.mistakes],
+    ["Замены", info.swaps],
+    ["Заметка", planItem?.note]
+  ];
+
+  sections.forEach(([label, text]) => {
+    if (!text) return;
+    const paragraph = document.createElement("p");
+    const strong = document.createElement("b");
+    strong.textContent = label + ": ";
+    paragraph.appendChild(strong);
+    paragraph.appendChild(document.createTextNode(text));
+    modalBody.appendChild(paragraph);
+  });
+
+  modal.hidden = false;
+}
+
+function closeModal() {
+  modal.hidden = true;
+}
+
+function renderLibrary(filter = "") {
+  const query = filter.trim().toLowerCase();
+  libraryList.innerHTML = "";
+
+  Object.keys(LIBRARY)
+    .filter((name) => !query || name.toLowerCase().includes(query))
+    .sort((a, b) => a.localeCompare(b, "ru"))
+    .forEach((name) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "lib-item";
+      button.textContent = name;
+      button.addEventListener("click", () => openLibrary(name));
+      libraryList.appendChild(button);
+    });
+
+  if (!libraryList.children.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "Ничего не найдено.";
+    libraryList.appendChild(empty);
+  }
+}
+
+async function exportJson() {
+  if (!currentUser || !sb) return;
+
+  setBackupStatus("Готовлю JSON...");
+  const { data, error } = await sb
+    .from("workouts")
+    .select("*")
+    .order("workout_date", { ascending: true });
+
+  if (error) {
+    setBackupStatus("Ошибка: " + error.message);
+    return;
+  }
+
+  const payload = {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    workouts: data || []
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `training-backup-${currentDate}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  setBackupStatus(`Скачано записей: ${(data || []).length}`);
+}
+
+async function importJson(file) {
+  if (!currentUser || !sb || !file) return;
+
+  setBackupStatus("Читаю файл...");
+  let payload;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch (_error) {
+    setBackupStatus("Это не JSON-файл.");
+    return;
+  }
+
+  const rows = Array.isArray(payload) ? payload : payload?.workouts;
+  if (!Array.isArray(rows)) {
+    setBackupStatus("В файле нет массива workouts.");
+    return;
+  }
+
+  const clean = rows
+    .map((row) => ({
+      user_id: currentUser.id,
+      workout_date: row.workout_date,
+      day: row.day,
+      exercise: row.exercise,
+      plan: row.plan || null,
+      set1: row.set1 || null,
+      set2: row.set2 || null,
+      set3: row.set3 || null,
+      rpe: row.rpe || null,
+      pain: row.pain || null,
+      notes: row.notes || null
+    }))
+    .filter((row) => row.workout_date && row.day && row.exercise);
+
+  if (!clean.length) {
+    setBackupStatus("Нет корректных строк для импорта.");
+    return;
+  }
+
+  if (!confirm(`Импортировать ${clean.length} строк?`)) {
+    setBackupStatus("Импорт отменён.");
+    return;
+  }
+
+  for (let index = 0; index < clean.length; index += 100) {
+    const chunk = clean.slice(index, index + 100);
+    const { error } = await sb.from("workouts").upsert(chunk, {
+      onConflict: "user_id,workout_date,day,exercise"
+    });
+    if (error) {
+      setBackupStatus("Ошибка импорта: " + error.message);
+      return;
+    }
+  }
+
+  setBackupStatus(`Импортировано строк: ${clean.length}`);
+  flashToast("Импорт завершён");
+  await loadForDate();
+}
+
 function applySession(session) {
   const user = session?.user ?? null;
   const userId = user?.id ?? null;
@@ -440,6 +731,11 @@ daysEl.addEventListener("input", (event) => {
   scheduleSave();
 });
 
+daysEl.addEventListener("click", (event) => {
+  const infoButton = event.target.closest("button.info");
+  if (infoButton) openLibrary(infoButton.dataset.ex);
+});
+
 dateInput.addEventListener("change", async () => {
   await flushSave();
   currentDate = dateInput.value;
@@ -447,6 +743,30 @@ dateInput.addEventListener("change", async () => {
 });
 
 exportButton.addEventListener("click", exportCsv);
+exportJsonButton.addEventListener("click", exportJson);
+importJsonInput.addEventListener("change", () => {
+  const file = importJsonInput.files?.[0];
+  importJson(file);
+  importJsonInput.value = "";
+});
+autofillButton.addEventListener("click", autofillLastWorkout);
+themeToggle.addEventListener("click", toggleTheme);
+themeToggle2.addEventListener("click", toggleTheme);
+fontToggle.addEventListener("click", toggleFont);
+
+document.querySelectorAll(".timer-chip").forEach((button) => {
+  button.addEventListener("click", () => startRestTimer(Number(button.dataset.seconds)));
+});
+timerStop.addEventListener("click", stopRestTimer);
+
+librarySearch.addEventListener("input", () => renderLibrary(librarySearch.value));
+modalClose.addEventListener("click", closeModal);
+modal.addEventListener("click", (event) => {
+  if (event.target === modal) closeModal();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !modal.hidden) closeModal();
+});
 
 checkButton.addEventListener("click", async () => {
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -467,16 +787,12 @@ checkButton.addEventListener("click", async () => {
       cache: "no-store"
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     setStatus("Связь с Supabase: OK");
     flashToast("✅ Связь с Supabase: OK", 2600);
 
-    if (currentUser) {
-      await flushSave();
-    }
+    if (currentUser) await flushSave();
   } catch (error) {
     const message =
       "Нет связи с Supabase: " +
@@ -522,8 +838,59 @@ logoutButton.addEventListener("click", async () => {
   if (sb) await sb.auth.signOut();
 });
 
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredPrompt = event;
+  installButton.hidden = false;
+  installHint.textContent = "Браузер готов установить приложение.";
+});
+
+installButton.addEventListener("click", async () => {
+  if (!deferredPrompt) {
+    installHint.textContent =
+      "Открой меню браузера и выбери «Установить приложение» или «На экран Домой».";
+    return;
+  }
+
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  installButton.hidden = true;
+});
+
+window.addEventListener("appinstalled", () => {
+  installButton.hidden = true;
+  installHint.textContent = "Приложение установлено.";
+  flashToast("Приложение установлено");
+});
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {
+      // offline mode is optional
+    });
+  });
+}
+
 async function init() {
+  applySettings();
   renderPlan();
+  renderLibrary();
+
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  if (isStandalone) {
+    installHint.textContent = "Приложение уже установлено.";
+  } else if (isIOS) {
+    installHint.textContent =
+      "На iPhone: «Поделиться» → «На экран Домой». Тогда откроется без браузерной панели.";
+  } else {
+    installHint.textContent =
+      "Если кнопка не появилась — открой меню браузера и выбери «Установить приложение».";
+  }
 
   if (!configured) {
     authMessage.textContent =
