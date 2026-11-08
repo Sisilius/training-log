@@ -195,11 +195,11 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
-function flashToast(text) {
+function flashToast(text, duration = 2200) {
   toast.textContent = text;
   toast.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove("show"), 1200);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), duration);
 }
 
 function cacheKey(date) {
@@ -459,7 +459,7 @@ checkButton.addEventListener("click", async () => {
   checkButton.disabled = true;
   checkButton.textContent = "Проверяю...";
   setStatus("Проверяю связь с Supabase...");
-  flashToast("Проверяю связь...");
+  flashToast("Проверяю связь...", 1200);
 
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/health?t=${Date.now()}`, {
@@ -472,7 +472,7 @@ checkButton.addEventListener("click", async () => {
     }
 
     setStatus("Связь с Supabase: OK");
-    flashToast("✅ Связь с Supabase: OK");
+    flashToast("✅ Связь с Supabase: OK", 2600);
 
     if (currentUser) {
       await flushSave();
@@ -483,7 +483,7 @@ checkButton.addEventListener("click", async () => {
       error.message +
       ". Проверь VPN, AdBlock, Private DNS и открой сайт по https, а не через file://.";
     setStatus(message);
-    flashToast("❌ " + error.message);
+    flashToast("❌ " + error.message, 4200);
   } finally {
     checkButton.disabled = false;
     checkButton.textContent = originalText;
