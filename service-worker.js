@@ -1,17 +1,20 @@
-﻿const CACHE = "training-log-v11";
+﻿const CACHE = "training-log-v12";
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=11",
-  "./app.js?v=11",
-  "./data.js?v=11",
-  "./config.js?v=11",
+  "./styles.css?v=12",
+  "./app.js?v=12",
+  "./data.js?v=12",
+  "./config.js?v=12",
   "./manifest.webmanifest",
   "./vendor/chart.umd.min.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./icons/apple-touch-icon.png"
+  "./icons/icon-1024.png",
+  "./icons/apple-touch-icon.png",
+  "./screenshots/workout.png",
+  "./screenshots/progress.png"
 ];
 
 self.addEventListener("install", (event) => {

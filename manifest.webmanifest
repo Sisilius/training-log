@@ -2,16 +2,12 @@
   "name": "Дневник тренировок",
   "short_name": "Тренировки",
   "description": "План, подходы, отдых и прогресс — без бумажки.",
-  "id": "/training-log/",
   "lang": "ru",
   "start_url": "/training-log/",
-  "scope": "/training-log/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#0f1115",
   "theme_color": "#0f1115",
-  "prefer_related_applications": false,
   "categories": ["health", "fitness", "sports"],
   "icons": [
     {
@@ -27,16 +23,36 @@
       "purpose": "any"
     },
     {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
+      "src": "icons/icon-1024.png",
+      "sizes": "1024x1024",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any"
     },
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/workout.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "screenshots/progress.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
     }
   ]
 }
