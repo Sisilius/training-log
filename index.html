@@ -10,7 +10,7 @@
   <title>Дневник тренировок</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <header id="app-header" hidden>
@@ -25,12 +25,17 @@
   <main>
     <section id="auth-view" class="auth">
       <h1>Дневник тренировок</h1>
-      <p class="auth-lead">Вход по email — пришлю ссылку. Пароль не нужен.</p>
+      <p class="auth-lead">Вход по email и паролю. Если пароль ещё не установлен — войди по ссылке и задай его в разделе «Ещё».</p>
       <form id="login-form">
         <label for="email">Email</label>
         <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
-        <button id="login-button" type="submit">Отправить ссылку</button>
+        <label for="password">Пароль</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="минимум 8 символов">
+        <button id="login-button" type="submit">Войти</button>
+        <button id="signup-button" class="secondary" type="button">Зарегистрироваться</button>
       </form>
+      <p class="auth-divider">или</p>
+      <button id="magic-button" class="secondary" type="button">Отправить ссылку на email</button>
       <p id="auth-message" class="message" aria-live="polite"></p>
     </section>
 
@@ -221,6 +226,16 @@
         </div>
 
         <div class="card">
+          <h2>Аккаунт</h2>
+          <p class="hint">Email: <b id="account-email">—</b></p>
+          <form id="password-form" class="form-grid">
+            <label class="full">Новый пароль<input type="password" id="new-password" autocomplete="new-password" minlength="8" placeholder="минимум 8 символов"></label>
+            <button type="submit">Установить пароль</button>
+          </form>
+          <p id="password-status" class="hint"></p>
+        </div>
+
+        <div class="card">
           <h2>Резервная копия</h2>
           <p class="hint">JSON — все данные. CSV — только текущий день.</p>
           <div class="row">
@@ -250,9 +265,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=12"></script>
-  <script src="data.js?v=12"></script>
+  <script src="config.js?v=13"></script>
+  <script src="data.js?v=13"></script>
   <script src="vendor/chart.umd.min.js"></script>
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

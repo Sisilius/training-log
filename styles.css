@@ -109,7 +109,7 @@ button.icon {
 .auth-lead { color: var(--muted); font-size: 14px; line-height: 1.45; margin: 0 0 18px; }
 #login-form { display: flex; flex-direction: column; gap: 8px; }
 #login-form label { font-size: 13px; color: var(--muted); }
-input[type="email"], input[type="date"], input[type="search"] {
+input[type="email"], input[type="password"], input[type="date"], input[type="search"] {
   width: 100%;
   background: var(--input);
   border: 1px solid var(--border);
@@ -121,6 +121,15 @@ input[type="email"], input[type="date"], input[type="search"] {
 }
 input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 .message { min-height: 20px; margin: 14px 0 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.auth-divider {
+  margin: 14px 0 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#magic-button { width: 100%; }
 
 .toolbar {
   display: flex;

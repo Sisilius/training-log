@@ -6,8 +6,15 @@ const authView = document.getElementById("auth-view");
 const appView = document.getElementById("app-view");
 const loginForm = document.getElementById("login-form");
 const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
 const loginButton = document.getElementById("login-button");
+const signupButton = document.getElementById("signup-button");
+const magicButton = document.getElementById("magic-button");
 const authMessage = document.getElementById("auth-message");
+const accountEmail = document.getElementById("account-email");
+const passwordForm = document.getElementById("password-form");
+const newPasswordInput = document.getElementById("new-password");
+const passwordStatus = document.getElementById("password-status");
 const userEmail = document.getElementById("user-email");
 const logoutButton = document.getElementById("logout");
 const tabs = document.getElementById("tabs");
@@ -1546,6 +1553,7 @@ function applySession(session) {
     appView.hidden = false;
     appHeader.hidden = false;
     userEmail.textContent = currentUser.email || "";
+    accountEmail.textContent = currentUser.email || "—";
     currentDate = dateInput.value;
     analytics.loaded = false;
     switchView("workout");
@@ -1695,14 +1703,16 @@ checkButton.addEventListener("click", async () => {
   }
 });
 
-loginForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+async function sendMagicLink() {
   if (!sb) return;
 
   const email = emailInput.value.trim();
-  if (!email) return;
+  if (!email) {
+    authMessage.textContent = "Введи email.";
+    return;
+  }
 
-  loginButton.disabled = true;
+  magicButton.disabled = true;
   authMessage.textContent = "Отправляю ссылку...";
 
   const { error } = await sb.auth.signInWithOtp({
@@ -1712,14 +1722,122 @@ loginForm.addEventListener("submit", async (event) => {
     }
   });
 
+  magicButton.disabled = false;
+
+  if (error) {
+    if (/rate limit/i.test(error.message)) {
+      authMessage.textContent =
+        "Лимит писем исчерпан. Войди по паролю или подожди — ссылка снова заработает позже.";
+    } else {
+      authMessage.textContent = "Ошибка: " + error.message;
+    }
+    return;
+  }
+
+  authMessage.textContent = "Ссылка отправлена. Проверь почту и папку «Спам».";
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!sb) return;
+
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+
+  if (!email || !password) {
+    authMessage.textContent =
+      "Введи email и пароль. Если пароль ещё не установлен — отправь ссылку на email.";
+    return;
+  }
+
+  loginButton.disabled = true;
+  authMessage.textContent = "Вхожу...";
+
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   loginButton.disabled = false;
+
+  if (error) {
+    authMessage.textContent =
+      "Не получилось: " +
+      error.message +
+      ". Если пароль не установлен — войди по ссылке и задай его в «Ещё».";
+    return;
+  }
+
+  authMessage.textContent = "";
+});
+
+signupButton.addEventListener("click", async () => {
+  if (!sb) return;
+
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+
+  if (!email || password.length < 8) {
+    authMessage.textContent = "Для регистрации нужен email и пароль не короче 8 символов.";
+    return;
+  }
+
+  signupButton.disabled = true;
+  authMessage.textContent = "Создаю аккаунт...";
+
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: window.location.origin + window.location.pathname
+    }
+  });
+
+  signupButton.disabled = false;
 
   if (error) {
     authMessage.textContent = "Ошибка: " + error.message;
     return;
   }
 
-  authMessage.textContent = "Ссылка отправлена. Проверь почту и папку «Спам».";
+  if (data.user && data.user.identities && data.user.identities.length === 0) {
+    authMessage.textContent =
+      "Похоже, аккаунт с таким email уже есть. Войди по паролю или по ссылке.";
+    return;
+  }
+
+  if (data.session) {
+    authMessage.textContent = "Аккаунт создан, ты вошёл.";
+  } else {
+    authMessage.textContent =
+      "Аккаунт создан. Подтверди email или отключи подтверждение в Supabase Auth → Providers → Email.";
+  }
+});
+
+magicButton.addEventListener("click", sendMagicLink);
+
+passwordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!sb || !currentUser) return;
+
+  const password = newPasswordInput.value;
+  if (password.length < 8) {
+    passwordStatus.textContent = "Пароль должен быть не короче 8 символов.";
+    return;
+  }
+
+  const submitButton = passwordForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  passwordStatus.textContent = "Сохраняю...";
+
+  const { error } = await sb.auth.updateUser({ password });
+  submitButton.disabled = false;
+
+  if (error) {
+    passwordStatus.textContent = "Ошибка: " + error.message;
+    return;
+  }
+
+  passwordForm.reset();
+  passwordStatus.textContent =
+    "Пароль установлен. Теперь можно входить по email и паролю.";
+  flashToast("Пароль установлен");
 });
 
 logoutButton.addEventListener("click", async () => {
@@ -1909,6 +2027,8 @@ async function init() {
     authMessage.textContent =
       "Вставь Project URL и anon key в config.js, затем перезагрузи страницу.";
     loginButton.disabled = true;
+    signupButton.disabled = true;
+    magicButton.disabled = true;
     return;
   }
 
