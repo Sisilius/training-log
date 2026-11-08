@@ -24,7 +24,8 @@ const exportJsonButton = document.getElementById("export-json");
 const importJsonInput = document.getElementById("import-json");
 const backupStatus = document.getElementById("backup-status");
 const autofillButton = document.getElementById("autofill");
-const autofillDay = document.getElementById("autofill-day");
+const planDaySelect = document.getElementById("plan-day");
+const timerBar = document.getElementById("timer-bar");
 const checkButton = document.getElementById("check");
 const statusEl = document.getElementById("status");
 const analyticsStatus = document.getElementById("analytics-status");
@@ -91,16 +92,54 @@ function todayIso() {
     .slice(0, 10);
 }
 
-function dayForDate(value) {
+let planDayMode = "auto";
+
+function localIso(date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function autoPlanDay(value) {
   const weekday = new Date(value + "T00:00:00").getDay();
   if (weekday === 1) return "mon";
   if (weekday === 3) return "wed";
   if (weekday === 5) return "fri";
-  return "mon";
+  return "rest";
+}
+
+function resolvedPlanDay() {
+  return planDayMode === "auto" ? autoPlanDay(currentDate) : planDayMode;
+}
+
+function formatDateLong(value) {
+  return new Date(value + "T00:00:00").toLocaleDateString("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long"
+  });
+}
+
+function nextTrainingDay(value) {
+  const start = new Date(value + "T00:00:00");
+
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + offset);
+    const planId = autoPlanDay(localIso(date));
+    if (planId !== "rest") {
+      return {
+        date: localIso(date),
+        day: PLAN.find((item) => item.id === planId) || null
+      };
+    }
+  }
+
+  return null;
 }
 
 dateInput.value = todayIso();
-autofillDay.value = dayForDate(dateInput.value);
+planDaySelect.value = "auto";
 bodyDate.value = todayIso();
 gtoTestDate.value = todayIso();
 runDate.value = todayIso();
@@ -230,92 +269,175 @@ function makeInput(dayId, exerciseName, field, placeholder) {
   return input;
 }
 
-function renderPlan() {
-  daysEl.innerHTML = "";
+function createExerciseCard(day, item) {
+  const card = document.createElement("div");
+  card.className = "ex";
 
-  PLAN.forEach((day) => {
-    const section = document.createElement("section");
-    section.className = "day";
+  const top = document.createElement("div");
+  top.className = "ex-top";
 
-    const heading = document.createElement("h2");
-    heading.textContent = day.title;
-    const sub = document.createElement("p");
-    sub.className = "sub";
-    sub.textContent = day.subtitle;
-    section.append(heading, sub);
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = item.name + (item.isNew ? " 🆕" : "");
 
-    day.items.forEach((item) => {
-      const card = document.createElement("div");
-      card.className = "ex";
+  const right = document.createElement("span");
+  right.className = "ex-right";
 
-      const top = document.createElement("div");
-      top.className = "ex-top";
+  const target = document.createElement("span");
+  target.className = "target";
+  target.textContent = item.target;
 
-      const name = document.createElement("span");
-      name.className = "name";
-      name.textContent = item.name + (item.isNew ? " 🆕" : "");
+  const info = document.createElement("button");
+  info.type = "button";
+  info.className = "info";
+  info.dataset.ex = item.name;
+  info.textContent = "i";
+  info.setAttribute("aria-label", `Описание: ${item.name}`);
 
-      const right = document.createElement("span");
-      right.className = "ex-right";
+  right.append(target, info);
+  top.append(name, right);
+  card.appendChild(top);
 
-      const target = document.createElement("span");
-      target.className = "target";
-      target.textContent = item.target;
+  if (item.cardio) {
+    const one = document.createElement("div");
+    one.className = "one";
+    const label = document.createElement("label");
+    label.textContent = "Факт: минуты / пульс";
+    label.appendChild(makeInput(day.id, item.name, "set1", "например 25 мин / 125"));
+    one.appendChild(label);
+    card.appendChild(one);
+  } else {
+    const sets = document.createElement("div");
+    sets.className = "sets";
+    [1, 2, 3].forEach((n) => {
+      const label = document.createElement("label");
+      label.textContent = `Подход ${n}`;
+      label.appendChild(makeInput(day.id, item.name, `set${n}`, "кг×повт"));
+      sets.appendChild(label);
+    });
+    card.appendChild(sets);
 
-      const info = document.createElement("button");
-      info.type = "button";
-      info.className = "info";
-      info.dataset.ex = item.name;
-      info.textContent = "i";
-      info.setAttribute("aria-label", `Описание: ${item.name}`);
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const rpeLabel = document.createElement("label");
+    rpeLabel.textContent = "RPE";
+    rpeLabel.appendChild(makeInput(day.id, item.name, "rpe", "6–8"));
+    const painLabel = document.createElement("label");
+    painLabel.textContent = "Боль в плече 0–10";
+    painLabel.appendChild(makeInput(day.id, item.name, "pain", "0"));
+    meta.append(rpeLabel, painLabel);
+    card.appendChild(meta);
+  }
 
-      right.append(target, info);
-      top.append(name, right);
-      card.appendChild(top);
+  if (item.note) {
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = item.note;
+    card.appendChild(note);
+  }
 
-      if (item.cardio) {
-        const one = document.createElement("div");
-        one.className = "one";
-        const label = document.createElement("label");
-        label.textContent = "Факт: минуты / пульс";
-        label.appendChild(makeInput(day.id, item.name, "set1", "например 25 мин / 125"));
-        one.appendChild(label);
-        card.appendChild(one);
-      } else {
-        const sets = document.createElement("div");
-        sets.className = "sets";
-        [1, 2, 3].forEach((n) => {
-          const label = document.createElement("label");
-          label.textContent = `Подход ${n}`;
-          label.appendChild(makeInput(day.id, item.name, `set${n}`, "кг×повт"));
-          sets.appendChild(label);
-        });
-        card.appendChild(sets);
+  return card;
+}
 
-        const meta = document.createElement("div");
-        meta.className = "meta";
-        const rpeLabel = document.createElement("label");
-        rpeLabel.textContent = "RPE";
-        rpeLabel.appendChild(makeInput(day.id, item.name, "rpe", "6–8"));
-        const painLabel = document.createElement("label");
-        painLabel.textContent = "Боль в плече 0–10";
-        painLabel.appendChild(makeInput(day.id, item.name, "pain", "0"));
-        meta.append(rpeLabel, painLabel);
-        card.appendChild(meta);
-      }
+function renderTrainingDay(day) {
+  const section = document.createElement("section");
+  section.className = "day";
 
-      if (item.note) {
-        const note = document.createElement("div");
-        note.className = "note";
-        note.textContent = item.note;
-        card.appendChild(note);
-      }
+  const heading = document.createElement("h2");
+  heading.textContent = day.title;
+  const sub = document.createElement("p");
+  sub.className = "sub";
+  sub.textContent = day.subtitle;
+  section.append(heading, sub);
 
-      section.appendChild(card);
+  day.items.forEach((item) => {
+    section.appendChild(createExerciseCard(day, item));
+  });
+
+  daysEl.appendChild(section);
+}
+
+function renderRestDay() {
+  const section = document.createElement("section");
+  section.className = "day";
+
+  const heading = document.createElement("h2");
+  heading.textContent = "Сегодня отдых";
+  const sub = document.createElement("p");
+  sub.className = "sub";
+  sub.textContent = `${formatDateLong(currentDate)} — восстановление`;
+  section.append(heading, sub);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  const cardTitle = document.createElement("h2");
+  cardTitle.textContent = "Что сделать";
+  card.appendChild(cardTitle);
+
+  const advice = [
+    "Прогулка 20–40 минут в лёгком темпе — это восстановление, а не тренировка.",
+    "Мобильность 8–10 минут: таз, грудной отдел, икры и задняя поверхность бедра.",
+    "Плечо: резина на наружную ротацию 2×12–15 и лопаточные движения — без боли.",
+    "Сон 7–9 часов, белок 1.6–2 г/кг, вода. Это влияет на прогресс сильнее, чем ещё одна тренировка.",
+    "Если боль в плече больше 3/10 или сильная крепатура — сегодня только отдых."
+  ];
+
+  const list = document.createElement("ul");
+  list.className = "advice-list";
+  advice.forEach((text) => {
+    const item = document.createElement("li");
+    item.textContent = text;
+    list.appendChild(item);
+  });
+  card.appendChild(list);
+  section.appendChild(card);
+
+  const next = nextTrainingDay(currentDate);
+  if (next && next.day) {
+    const nextCard = document.createElement("div");
+    nextCard.className = "next-workout";
+
+    const nextTitle = document.createElement("h3");
+    nextTitle.textContent = "Следующая тренировка";
+    const nextText = document.createElement("p");
+    nextText.textContent = `${next.day.title} — ${formatDateLong(next.date)}`;
+
+    const nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.textContent = "Открыть день";
+    nextButton.addEventListener("click", async () => {
+      dateInput.value = next.date;
+      currentDate = next.date;
+      planDayMode = "auto";
+      planDaySelect.value = "auto";
+      await loadForDate();
+      renderPlan();
+      fillInputs();
     });
 
-    daysEl.appendChild(section);
-  });
+    nextCard.append(nextTitle, nextText, nextButton);
+    section.appendChild(nextCard);
+  }
+
+  daysEl.appendChild(section);
+}
+
+function renderPlan() {
+  const dayId = resolvedPlanDay();
+  const isRest = dayId === "rest";
+
+  timerBar.hidden = isRest;
+  autofillButton.disabled = isRest;
+  daysEl.innerHTML = "";
+
+  if (isRest) {
+    stopRestTimer();
+    renderRestDay();
+    return;
+  }
+
+  const day = PLAN.find((item) => item.id === dayId);
+  if (day) renderTrainingDay(day);
 }
 
 function keyFor(dayId, exerciseName) {
@@ -521,7 +643,12 @@ function rowHasData(row) {
 async function autofillLastWorkout() {
   if (!currentUser || !sb) return;
 
-  const dayId = autofillDay.value;
+  const dayId = resolvedPlanDay();
+  if (dayId === "rest") {
+    setStatus("Сегодня отдых — заполнять нечего.");
+    return;
+  }
+
   const day = PLAN.find((item) => item.id === dayId);
   const dayTitle = day ? day.title : dayId;
 
@@ -1555,6 +1682,9 @@ function applySession(session) {
     userEmail.textContent = currentUser.email || "";
     accountEmail.textContent = currentUser.email || "—";
     currentDate = dateInput.value;
+    planDayMode = "auto";
+    planDaySelect.value = "auto";
+    renderPlan();
     analytics.loaded = false;
     switchView("workout");
     loadForDate();
@@ -1623,9 +1753,17 @@ daysEl.addEventListener("click", (event) => {
 dateInput.addEventListener("change", async () => {
   await flushSave();
   currentDate = dateInput.value;
-  autofillDay.value = dayForDate(currentDate);
+  planDayMode = "auto";
+  planDaySelect.value = "auto";
+  renderPlan();
   analytics.loaded = false;
   await loadForDate();
+});
+
+planDaySelect.addEventListener("change", () => {
+  planDayMode = planDaySelect.value;
+  renderPlan();
+  fillInputs();
 });
 
 tabs.addEventListener("click", (event) => {

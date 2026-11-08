@@ -10,7 +10,7 @@
   <title>Дневник тренировок</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
   <header id="app-header" hidden>
@@ -56,10 +56,12 @@
           </label>
           <label class="date-label">
             День
-            <select id="autofill-day">
+            <select id="plan-day">
+              <option value="auto">Авто</option>
               <option value="mon">Пн</option>
               <option value="wed">Ср</option>
               <option value="fri">Пт</option>
+              <option value="rest">Отдых</option>
             </select>
           </label>
           <button id="autofill" type="button">Заполнить пустые</button>
@@ -265,9 +267,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=13"></script>
-  <script src="data.js?v=13"></script>
+  <script src="config.js?v=14"></script>
+  <script src="data.js?v=14"></script>
   <script src="vendor/chart.umd.min.js"></script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

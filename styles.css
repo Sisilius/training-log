@@ -175,6 +175,24 @@ input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 .day { margin-top: 20px; }
 .day h2 { font-size: 17px; margin: 0 0 2px; color: var(--accent); }
 .sub { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+.advice-list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.advice-list li { margin-bottom: 6px; }
+.next-workout {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.next-workout h3 { margin: 0 0 4px; font-size: 16px; color: var(--accent); }
+.next-workout p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
 
 .ex {
   background: var(--panel);
