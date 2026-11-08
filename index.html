@@ -6,10 +6,11 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Тренировки">
   <title>Дневник тренировок</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
   <header id="app-header" hidden>
@@ -48,7 +49,15 @@
             Дата
             <input type="date" id="date">
           </label>
-          <button id="autofill" type="button">Как в прошлый раз</button>
+          <label class="date-label">
+            День
+            <select id="autofill-day">
+              <option value="mon">Пн</option>
+              <option value="wed">Ср</option>
+              <option value="fri">Пт</option>
+            </select>
+          </label>
+          <button id="autofill" type="button">Заполнить пустые</button>
           <button id="export" type="button">Экспорт CSV</button>
           <button id="check" class="secondary" type="button">Проверить связь</button>
         </div>
@@ -190,7 +199,7 @@
         <div class="card">
           <h2>Установить на телефон</h2>
           <p class="hint">Приложение откроется без браузерной панели и будет работать офлайн. Данные — в локальном кэше, синк — при связи.</p>
-          <button id="install" type="button" hidden>Установить</button>
+          <button id="install" type="button">Как установить</button>
           <p id="install-hint" class="hint"></p>
         </div>
 
@@ -232,9 +241,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=9"></script>
-  <script src="data.js?v=9"></script>
+  <script src="config.js?v=10"></script>
+  <script src="data.js?v=10"></script>
   <script src="vendor/chart.umd.min.js"></script>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

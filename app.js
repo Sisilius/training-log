@@ -17,6 +17,7 @@ const exportJsonButton = document.getElementById("export-json");
 const importJsonInput = document.getElementById("import-json");
 const backupStatus = document.getElementById("backup-status");
 const autofillButton = document.getElementById("autofill");
+const autofillDay = document.getElementById("autofill-day");
 const checkButton = document.getElementById("check");
 const statusEl = document.getElementById("status");
 const analyticsStatus = document.getElementById("analytics-status");
@@ -80,7 +81,16 @@ function todayIso() {
     .slice(0, 10);
 }
 
+function dayForDate(value) {
+  const weekday = new Date(value + "T00:00:00").getDay();
+  if (weekday === 1) return "mon";
+  if (weekday === 3) return "wed";
+  if (weekday === 5) return "fri";
+  return "mon";
+}
+
 dateInput.value = todayIso();
+autofillDay.value = dayForDate(dateInput.value);
 bodyDate.value = todayIso();
 gtoTestDate.value = todayIso();
 runDate.value = todayIso();
@@ -492,56 +502,73 @@ async function loadForDate() {
   setStatus(data && data.length ? "Загружено" : "Новая дата");
 }
 
-function hasAnyValue() {
-  return [...state.values()].some(
-    (entry) => entry.set1 || entry.set2 || entry.set3 || entry.rpe || entry.pain
+function rowHasData(row) {
+  return ["set1", "set2", "set3", "rpe", "pain"].some(
+    (field) => String(row[field] || "").trim()
   );
 }
 
 async function autofillLastWorkout() {
   if (!currentUser || !sb) return;
 
-  setStatus("Ищу прошлую тренировку...");
+  const dayId = autofillDay.value;
+  const day = PLAN.find((item) => item.id === dayId);
+  const dayTitle = day ? day.title : dayId;
+
+  setStatus(`Ищу прошлую тренировку: ${dayTitle}...`);
   const { data, error } = await sb
     .from("workouts")
     .select("*")
+    .eq("day", dayId)
     .lt("workout_date", currentDate)
     .order("workout_date", { ascending: false })
-    .limit(200);
+    .limit(500);
 
   if (error) {
     setStatus("Ошибка загрузки прошлой тренировки: " + error.message);
     return;
   }
 
-  if (!data || !data.length) {
-    setStatus("Прошлых тренировок нет.");
-    flashToast("Прошлых тренировок нет");
+  const rows = data || [];
+  const lastDate = rows.find(rowHasData)?.workout_date;
+
+  if (!lastDate) {
+    setStatus(`Нет прошлых записей для дня «${dayTitle}».`);
+    flashToast("Нет прошлых записей для этого дня", 2600);
     return;
   }
 
-  const lastDate = data[0].workout_date;
-  const rows = data.filter((row) => row.workout_date === lastDate);
+  const sourceRows = rows.filter((row) => row.workout_date === lastDate);
+  let filled = 0;
 
-  if (hasAnyValue() && !confirm(`Заменить текущие значения данными за ${lastDate}?`)) {
-    return;
-  }
+  sourceRows.forEach((row) => {
+    if (!row.exercise) return;
 
-  rows.forEach((row) => {
-    if (!row.day || !row.exercise) return;
-    state.set(keyFor(row.day, row.exercise), {
-      set1: row.set1 || "",
-      set2: row.set2 || "",
-      set3: row.set3 || "",
-      rpe: row.rpe || "",
-      pain: row.pain || ""
+    const key = keyFor(dayId, row.exercise);
+    const entry = state.get(key) || emptyEntry();
+
+    ["set1", "set2", "set3", "rpe", "pain"].forEach((field) => {
+      const currentValue = String(entry[field] || "").trim();
+      const sourceValue = String(row[field] || "").trim();
+
+      if (!currentValue && sourceValue) {
+        entry[field] = sourceValue;
+        filled += 1;
+      }
     });
+
+    state.set(key, entry);
   });
 
   fillInputs();
-  scheduleSave();
-  setStatus(`Заполнено из ${lastDate}`);
-  flashToast(`Заполнено из ${lastDate}`, 2600);
+
+  if (filled) scheduleSave();
+
+  const message = filled
+    ? `Заполнено пустых полей: ${filled} из ${lastDate}`
+    : `Нет пустых полей для заполнения (${lastDate})`;
+  setStatus(message);
+  flashToast(message, 3000);
 }
 
 function formatTimer(totalSeconds) {
@@ -1585,6 +1612,7 @@ daysEl.addEventListener("click", (event) => {
 dateInput.addEventListener("change", async () => {
   await flushSave();
   currentDate = dateInput.value;
+  autofillDay.value = dayForDate(currentDate);
   analytics.loaded = false;
   await loadForDate();
 });
@@ -1696,28 +1724,73 @@ logoutButton.addEventListener("click", async () => {
   if (sb) await sb.auth.signOut();
 });
 
+function showInstallInstructions() {
+  const userAgent = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+  const isAndroid = /Android/.test(userAgent);
+
+  modalTitle.textContent = "Установка приложения";
+  modalBody.innerHTML = "";
+
+  const steps = isIOS
+    ? [
+        "Открой сайт в Safari, а не во встроенном браузере Telegram/Instagram.",
+        "Нажми «Поделиться» — квадрат со стрелкой вверх.",
+        "Выбери «На экран «Домой»».",
+        "Назови «Тренировки» и нажми «Добавить»."
+      ]
+    : isAndroid
+      ? [
+          "Открой сайт в Chrome, а не во встроенном браузере Telegram.",
+          "Нажми ⋮ в правом верхнем углу.",
+          "Выбери «Установить приложение» или «Добавить на главный экран».",
+          "Если пункта нет — обнови страницу и подожди пару секунд."
+        ]
+      : [
+          "В Chrome или Edge нажми иконку установки в адресной строке.",
+          "Или открой меню ⋮ → «Установить приложение».",
+          "На компьютере приложение откроется в отдельном окне."
+        ];
+
+  steps.forEach((text, index) => {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = `${index + 1}. ${text}`;
+    modalBody.appendChild(paragraph);
+  });
+
+  modal.hidden = false;
+}
+
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   deferredPrompt = event;
-  installButton.hidden = false;
+  installButton.textContent = "Установить приложение";
+  installButton.disabled = false;
   installHint.textContent = "Браузер готов установить приложение.";
 });
 
 installButton.addEventListener("click", async () => {
   if (!deferredPrompt) {
-    installHint.textContent =
-      "Открой меню браузера и выбери «Установить приложение» или «На экран Домой».";
+    showInstallInstructions();
     return;
   }
 
   deferredPrompt.prompt();
-  await deferredPrompt.userChoice;
+  const choice = await deferredPrompt.userChoice;
   deferredPrompt = null;
-  installButton.hidden = true;
+
+  if (choice.outcome === "accepted") {
+    installButton.textContent = "Установлено";
+    installButton.disabled = true;
+    installHint.textContent = "Приложение установлено.";
+  } else {
+    installButton.textContent = "Как установить";
+  }
 });
 
 window.addEventListener("appinstalled", () => {
-  installButton.hidden = true;
+  installButton.textContent = "Установлено";
+  installButton.disabled = true;
   installHint.textContent = "Приложение установлено.";
   flashToast("Приложение установлено");
 });
@@ -1742,13 +1815,17 @@ async function init() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   if (isStandalone) {
-    installHint.textContent = "Приложение уже установлено.";
+    installButton.textContent = "Установлено";
+    installButton.disabled = true;
+    installHint.textContent = "Приложение уже открыто в режиме установленного.";
   } else if (isIOS) {
+    installButton.textContent = "Как установить";
     installHint.textContent =
-      "На iPhone: «Поделиться» → «На экран Домой». Тогда откроется без браузерной панели.";
+      "На iPhone: «Поделиться» → «На экран Домой». В меню Safari нет пункта «Установить приложение» — это нормально.";
   } else {
+    installButton.textContent = "Как установить";
     installHint.textContent =
-      "Если кнопка не появилась — открой меню браузера и выбери «Установить приложение».";
+      "Chrome/Edge: иконка установки в адресной строке или меню ⋮ → «Установить приложение».";
   }
 
   if (!configured) {
