@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Дневник тренировок</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <header id="app-header" hidden>
@@ -38,7 +38,7 @@
         <button id="export" type="button">Экспорт CSV</button>
         <button id="check" class="secondary" type="button">Проверить связь</button>
       </div>
-      <p id="status" class="status"></p>
+      <p id="status" class="status" aria-live="polite"></p>
       <div id="days"></div>
     </section>
   </main>
@@ -46,7 +46,7 @@
   <div id="toast" class="toast">Сохранено</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

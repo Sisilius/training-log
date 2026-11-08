@@ -451,14 +451,20 @@ exportButton.addEventListener("click", exportCsv);
 checkButton.addEventListener("click", async () => {
   if (!supabaseUrl || !supabaseAnonKey) {
     setStatus("config.js не заполнен: нет URL или anon key.");
+    flashToast("❌ config.js не заполнен");
     return;
   }
 
+  const originalText = checkButton.textContent;
+  checkButton.disabled = true;
+  checkButton.textContent = "Проверяю...";
   setStatus("Проверяю связь с Supabase...");
+  flashToast("Проверяю связь...");
 
   try {
-    const response = await fetch(`${supabaseUrl}/auth/v1/health`, {
-      headers: { apikey: supabaseAnonKey }
+    const response = await fetch(`${supabaseUrl}/auth/v1/health?t=${Date.now()}`, {
+      headers: { apikey: supabaseAnonKey },
+      cache: "no-store"
     });
 
     if (!response.ok) {
@@ -466,13 +472,21 @@ checkButton.addEventListener("click", async () => {
     }
 
     setStatus("Связь с Supabase: OK");
-    if (currentUser) await flushSave();
+    flashToast("✅ Связь с Supabase: OK");
+
+    if (currentUser) {
+      await flushSave();
+    }
   } catch (error) {
-    setStatus(
+    const message =
       "Нет связи с Supabase: " +
-        error.message +
-        ". Проверь VPN, AdBlock, Private DNS и открой сайт по https, а не через file://."
-    );
+      error.message +
+      ". Проверь VPN, AdBlock, Private DNS и открой сайт по https, а не через file://.";
+    setStatus(message);
+    flashToast("❌ " + error.message);
+  } finally {
+    checkButton.disabled = false;
+    checkButton.textContent = originalText;
   }
 });
 
