@@ -1,12 +1,12 @@
-﻿const CACHE = "training-log-v16";
+﻿const CACHE = "training-log-v17";
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=16",
-  "./app.js?v=16",
-  "./data.js?v=16",
-  "./config.js?v=16",
+  "./styles.css?v=17",
+  "./app.js?v=17",
+  "./data.js?v=17",
+  "./config.js?v=17",
   "./manifest.webmanifest",
   "./vendor/chart.umd.min.js",
   "./icons/icon-192.png",

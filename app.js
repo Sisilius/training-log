@@ -869,7 +869,9 @@ function renderLibrary(filter = "") {
 }
 
 function parseSet(value) {
-  const match = String(value || "").match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+)/i);
+  const match = String(value || "").match(
+    /(\d+(?:[.,]\d+)?)\s*[x×х*·]\s*(\d+)/i
+  );
   if (!match) return null;
   return {
     weight: Number(match[1].replace(",", ".")),
