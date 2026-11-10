@@ -486,6 +486,8 @@ input[type="number"] {
   font-size: 13px;
 }
 .history-row span:last-child { color: var(--muted); text-align: right; }
+.history-row.clickable { cursor: pointer; }
+.history-row.clickable:hover { border-color: var(--accent); }
 
 .recommendations { display: flex; flex-direction: column; gap: 8px; }
 .recommendation {

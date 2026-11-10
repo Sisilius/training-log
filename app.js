@@ -70,6 +70,7 @@ const bodySleep = document.getElementById("body-sleep");
 const bodyMood = document.getElementById("body-mood");
 const bodySmoking = document.getElementById("body-smoking");
 const bodyNotes = document.getElementById("body-notes");
+const bodyStatus = document.getElementById("body-status");
 const bodyHistory = document.getElementById("body-history");
 const datesForm = document.getElementById("dates-form");
 const gtoDateInput = document.getElementById("gto-date");
@@ -1577,12 +1578,23 @@ function renderBody() {
     .slice(0, 12)
     .forEach((row) => {
       const parts = [
-        row.weight_kg ? `${row.weight_kg} кг` : null,
-        row.waist_cm ? `${row.waist_cm} см` : null,
-        row.sleep_hours ? `сон ${row.sleep_hours} ч` : null,
-        row.mood ? `настроение ${row.mood}/5` : null
+        row.weight_kg != null ? `${row.weight_kg} кг` : null,
+        row.waist_cm != null ? `${row.waist_cm} см` : null,
+        row.sleep_hours != null ? `сон ${row.sleep_hours} ч` : null,
+        row.mood != null ? `настроение ${row.mood}/5` : null,
+        row.smoking != null ? `сигарет ${row.smoking}` : null
       ].filter(Boolean);
-      bodyHistory.appendChild(historyRow(row.measured_on, parts.join(" · ") || "—"));
+
+      const item = historyRow(row.measured_on, parts.join(" · ") || "—");
+      item.classList.add("clickable");
+      item.title = "Открыть запись для редактирования";
+      item.addEventListener("click", async () => {
+        bodyDate.value = row.measured_on;
+        await loadBodyDate();
+        bodyDate.focus();
+        bodyForm.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      bodyHistory.appendChild(item);
     });
 
   if (!rows.length) bodyHistory.appendChild(historyRow("Пока нет замеров", "—"));
@@ -1769,10 +1781,59 @@ async function switchView(view) {
     section.hidden = section.id !== `view-${view}`;
   });
 
-  if (view === "progress" || view === "body" || view === "goals") {
+  if (view === "body") {
+    await loadAnalytics();
+    await loadBodyDate();
+    renderBody();
+    return;
+  }
+
+  if (view === "progress" || view === "goals") {
     await loadAnalytics();
     renderCurrentView();
   }
+}
+
+function clearBodyFields() {
+  bodyWeight.value = "";
+  bodyWaist.value = "";
+  bodySleep.value = "";
+  bodyMood.value = "";
+  bodySmoking.value = "";
+  bodyNotes.value = "";
+}
+
+async function loadBodyDate() {
+  if (!currentUser || !sb) return;
+
+  const date = bodyDate.value;
+  if (!date) return;
+
+  bodyStatus.textContent = "Загружаю запись...";
+  const { data, error } = await sb
+    .from("body_metrics")
+    .select("*")
+    .eq("measured_on", date)
+    .maybeSingle();
+
+  if (error) {
+    bodyStatus.textContent = "Ошибка загрузки: " + error.message;
+    return;
+  }
+
+  if (!data) {
+    clearBodyFields();
+    bodyStatus.textContent = "Новая запись за эту дату — можно заполнять.";
+    return;
+  }
+
+  bodyWeight.value = data.weight_kg ?? "";
+  bodyWaist.value = data.waist_cm ?? "";
+  bodySleep.value = data.sleep_hours ?? "";
+  bodyMood.value = data.mood ?? "";
+  bodySmoking.value = data.smoking ?? "";
+  bodyNotes.value = data.notes || "";
+  bodyStatus.textContent = "Запись загружена — можно править и сохранить.";
 }
 
 async function saveBody(event) {
@@ -1802,8 +1863,7 @@ async function saveBody(event) {
   }
 
   flashToast("Замер сохранён");
-  bodyForm.reset();
-  bodyDate.value = todayIso();
+  await loadBodyDate();
   await loadAnalytics(true);
   renderBody();
 }
@@ -2199,6 +2259,7 @@ fontToggle.addEventListener("click", toggleFont);
 exerciseSelect.addEventListener("change", renderExerciseChart);
 gtoMetricSelect.addEventListener("change", renderGto);
 bodyForm.addEventListener("submit", saveBody);
+bodyDate.addEventListener("change", loadBodyDate);
 gtoForm.addEventListener("submit", saveGto);
 runForm.addEventListener("submit", saveRun);
 datesForm.addEventListener("submit", saveDates);

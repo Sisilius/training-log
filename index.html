@@ -10,7 +10,7 @@
   <title>Дневник тренировок</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
   <header id="app-header" hidden>
@@ -129,6 +129,8 @@
             <label class="full">Заметки<input type="text" id="body-notes" placeholder="самочувствие, аппетит"></label>
             <button type="submit">Сохранить замер</button>
           </form>
+          <p class="hint">Выбери дату — запись загрузится в поля. Пустые поля можно заполнить позже и сохранить ещё раз.</p>
+          <p id="body-status" class="hint"></p>
         </div>
 
         <div class="card">
@@ -268,9 +270,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20"></script>
-  <script src="data.js?v=20"></script>
+  <script src="config.js?v=21"></script>
+  <script src="data.js?v=21"></script>
   <script src="vendor/chart.umd.min.js"></script>
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>
