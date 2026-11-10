@@ -161,6 +161,8 @@ let currentView = "workout";
 let currentUser = null;
 let currentUserId = null;
 let state = new Map();
+let selectedSlots = new Map();
+let slotHistory = new Map();
 let saveTimer = null;
 let saveChain = Promise.resolve();
 let toastTimer = null;
@@ -269,19 +271,180 @@ function toggleFont() {
   applySettings();
 }
 
-function makeInput(dayId, exerciseName, field, placeholder) {
+function makeNumberInput(dayId, slotId, exerciseName, setName, field, mode, value, placeholder = "") {
   const input = document.createElement("input");
-  input.type = "text";
+  input.type = "number";
+  input.min = "0";
+  input.step = field === "weight" || field === "distance" ? "0.5" : "1";
+  input.inputMode = field === "weight" || field === "distance" ? "decimal" : "numeric";
   input.dataset.day = dayId;
+  input.dataset.slot = slotId;
   input.dataset.ex = exerciseName;
+  input.dataset.set = String(setName);
   input.dataset.field = field;
+  input.dataset.mode = mode;
   input.placeholder = placeholder;
+  input.value = value ?? "";
   input.autocomplete = "off";
-  if (field === "rpe" || field === "pain") input.inputMode = "decimal";
   return input;
 }
 
-function createExerciseCard(day, item) {
+function slotKey(dayId, slotId) {
+  return `${dayId}|${slotId}`;
+}
+
+function findSlotForRow(day, row) {
+  if (!day) return null;
+  if (row.slot_id) {
+    return day.slots.find((slot) => slot.id === row.slot_id) || null;
+  }
+  return (
+    day.slots.find((slot) =>
+      slot.options.some((option) => option.name === normalizeExerciseName(row.exercise))
+    ) || null
+  );
+}
+
+function slotIdForRow(row) {
+  if (row.slot_id) return row.slot_id;
+  const day = PLAN.find((item) => item.id === row.day);
+  if (!day) return null;
+  const normalized = normalizeExerciseName(row.exercise);
+  const slot = day.slots.find((item) =>
+    item.options.some((option) => option.name === normalized)
+  );
+  return slot ? slot.id : null;
+}
+
+function recommendedOption(day, slot) {
+  const last = slotHistory.get(slotKey(day.id, slot.id));
+  if (!last) return slot.options[0];
+
+  const index = slot.options.findIndex(
+    (option) => option.name === normalizeExerciseName(last)
+  );
+  if (index === -1) return slot.options[0];
+  return slot.options[(index + 1) % slot.options.length];
+}
+
+function getSelectedOption(day, slot) {
+  const name = selectedSlots.get(slotKey(day.id, slot.id));
+  return slot.options.find((option) => option.name === name) || recommendedOption(day, slot);
+}
+
+function slotHint(day, slot, selected) {
+  const key = slotKey(day.id, slot.id);
+  const last = slotHistory.get(key);
+  const recommendation = recommendedOption(day, slot);
+
+  if (last) {
+    let text = `В прошлый раз: ${last}. Рекомендую: ${recommendation.name} — ротация.`;
+    if (selected.name !== recommendation.name) {
+      text += ` Выбрано: ${selected.name}.`;
+    }
+    return text;
+  }
+
+  return `Начни с «${recommendation.name}».`;
+}
+
+function createSetInputs(day, slot, selected, entry) {
+  const mode = selected.mode || "weight_reps";
+  const wrapper = document.createElement("div");
+  wrapper.className = "set-table";
+
+  if (mode === "cardio") {
+    const parsed = parseSetMode(entry.set1, mode);
+    const row = document.createElement("div");
+    row.className = "set-row two";
+    const minutesLabel = document.createElement("label");
+    minutesLabel.textContent = "Минуты";
+    minutesLabel.appendChild(
+      makeNumberInput(day.id, slot.id, selected.name, 1, "minutes", mode, parsed.minutes, "25")
+    );
+    const hrLabel = document.createElement("label");
+    hrLabel.textContent = "Пульс";
+    hrLabel.appendChild(
+      makeNumberInput(day.id, slot.id, selected.name, 1, "hr", mode, parsed.hr, "125")
+    );
+    row.append(minutesLabel, hrLabel);
+    wrapper.appendChild(row);
+    return wrapper;
+  }
+
+  if (mode === "bodyweight") {
+    const parsedFirst = parseSetMode(entry.set1 || entry.set2 || entry.set3, mode);
+    const toggleRow = document.createElement("label");
+    toggleRow.className = "bodyweight-toggle";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = parsedFirst.bodyweight !== false;
+    checkbox.dataset.bodyweight = "1";
+    checkbox.dataset.day = day.id;
+    checkbox.dataset.slot = slot.id;
+    checkbox.dataset.ex = selected.name;
+    checkbox.dataset.mode = mode;
+    toggleRow.append(checkbox, document.createTextNode(" Свой вес (доп. вес можно не вводить)"));
+    wrapper.appendChild(toggleRow);
+  }
+
+  for (let setNumber = 1; setNumber <= 3; setNumber += 1) {
+    const value = entry[`set${setNumber}`];
+    const parsed = parseSetMode(value, mode);
+    const row = document.createElement("div");
+    row.className = "set-row";
+
+    const label = document.createElement("span");
+    label.className = "set-label";
+    label.textContent = String(setNumber);
+    row.appendChild(label);
+
+    if (mode === "time") {
+      row.className = "set-row time";
+      const secondsLabel = document.createElement("label");
+      secondsLabel.textContent = "Секунды";
+      secondsLabel.appendChild(
+        makeNumberInput(day.id, slot.id, selected.name, setNumber, "seconds", mode, parsed.seconds, "30")
+      );
+      row.appendChild(secondsLabel);
+    } else if (mode === "carry") {
+      const weightLabel = document.createElement("label");
+      weightLabel.textContent = "Вес, кг";
+      weightLabel.appendChild(
+        makeNumberInput(day.id, slot.id, selected.name, setNumber, "weight", mode, parsed.weight, "20")
+      );
+      const distanceLabel = document.createElement("label");
+      distanceLabel.textContent = "Метры";
+      distanceLabel.appendChild(
+        makeNumberInput(day.id, slot.id, selected.name, setNumber, "distance", mode, parsed.distance, "30")
+      );
+      row.append(weightLabel, distanceLabel);
+    } else {
+      const weightLabel = document.createElement("label");
+      weightLabel.textContent = mode === "bodyweight" ? "Доп. вес" : "Вес";
+      weightLabel.appendChild(
+        makeNumberInput(day.id, slot.id, selected.name, setNumber, "weight", mode, parsed.weight, "кг")
+      );
+      const repsLabel = document.createElement("label");
+      repsLabel.textContent = "Повторы";
+      repsLabel.appendChild(
+        makeNumberInput(day.id, slot.id, selected.name, setNumber, "reps", mode, parsed.reps, "10")
+      );
+      row.append(weightLabel, repsLabel);
+    }
+
+    wrapper.appendChild(row);
+  }
+
+  return wrapper;
+}
+
+function createSlotCard(day, slot) {
+  const selected = getSelectedOption(day, slot);
+  const mode = selected.mode || "weight_reps";
+  const entryKey = keyFor(day.id, slot.id, selected.name);
+  const entry = state.get(entryKey) || emptyEntry();
+
   const card = document.createElement("div");
   card.className = "ex";
 
@@ -290,61 +453,70 @@ function createExerciseCard(day, item) {
 
   const name = document.createElement("span");
   name.className = "name";
-  name.textContent = item.name + (item.isNew ? " 🆕" : "");
+  name.textContent = `${slot.label}: ${selected.name}`;
 
   const right = document.createElement("span");
   right.className = "ex-right";
 
   const target = document.createElement("span");
   target.className = "target";
-  target.textContent = item.target;
+  target.textContent = selected.target;
 
   const info = document.createElement("button");
   info.type = "button";
   info.className = "info";
-  info.dataset.ex = item.name;
+  info.dataset.ex = selected.name;
   info.textContent = "i";
-  info.setAttribute("aria-label", `Описание: ${item.name}`);
+  info.setAttribute("aria-label", `Описание: ${selected.name}`);
 
   right.append(target, info);
   top.append(name, right);
   card.appendChild(top);
 
-  if (item.cardio) {
-    const one = document.createElement("div");
-    one.className = "one";
-    const label = document.createElement("label");
-    label.textContent = "Факт: минуты / пульс";
-    label.appendChild(makeInput(day.id, item.name, "set1", "например 25 мин / 125"));
-    one.appendChild(label);
-    card.appendChild(one);
-  } else {
-    const sets = document.createElement("div");
-    sets.className = "sets";
-    [1, 2, 3].forEach((n) => {
-      const label = document.createElement("label");
-      label.textContent = `Подход ${n}`;
-      label.appendChild(makeInput(day.id, item.name, `set${n}`, "кг×повт"));
-      sets.appendChild(label);
-    });
-    card.appendChild(sets);
+  const select = document.createElement("select");
+  select.className = "slot-select";
+  slot.options.forEach((option) => {
+    const optionElement = document.createElement("option");
+    optionElement.value = option.name;
+    optionElement.textContent = option.name;
+    select.appendChild(optionElement);
+  });
+  select.value = selected.name;
+  select.addEventListener("change", () => {
+    selectedSlots.set(slotKey(day.id, slot.id), select.value);
+    renderPlan();
+    scheduleSave();
+  });
+  card.appendChild(select);
 
+  const hint = document.createElement("div");
+  hint.className = "slot-hint";
+  hint.textContent = slotHint(day, slot, selected);
+  card.appendChild(hint);
+
+  card.appendChild(createSetInputs(day, slot, selected, entry));
+
+  if (mode !== "cardio") {
     const meta = document.createElement("div");
     meta.className = "meta";
     const rpeLabel = document.createElement("label");
     rpeLabel.textContent = "RPE";
-    rpeLabel.appendChild(makeInput(day.id, item.name, "rpe", "6–8"));
+    rpeLabel.appendChild(
+      makeNumberInput(day.id, slot.id, selected.name, 0, "rpe", mode, entry.rpe, "7")
+    );
     const painLabel = document.createElement("label");
     painLabel.textContent = "Боль в плече 0–10";
-    painLabel.appendChild(makeInput(day.id, item.name, "pain", "0"));
+    painLabel.appendChild(
+      makeNumberInput(day.id, slot.id, selected.name, 0, "pain", mode, entry.pain, "0")
+    );
     meta.append(rpeLabel, painLabel);
     card.appendChild(meta);
   }
 
-  if (item.note) {
+  if (selected.note) {
     const note = document.createElement("div");
     note.className = "note";
-    note.textContent = item.note;
+    note.textContent = selected.note;
     card.appendChild(note);
   }
 
@@ -391,8 +563,8 @@ function renderTrainingDay(day) {
   sub.textContent = day.subtitle;
   section.append(heading, sub);
 
-  day.items.forEach((item) => {
-    section.appendChild(createExerciseCard(day, item));
+  day.slots.forEach((slot) => {
+    section.appendChild(createSlotCard(day, slot));
   });
 
   section.appendChild(createCooldownCard());
@@ -454,7 +626,6 @@ function renderRestDay() {
       planDaySelect.value = "auto";
       await loadForDate();
       renderPlan();
-      fillInputs();
     });
 
     nextCard.append(nextTitle, nextText, nextButton);
@@ -483,20 +654,102 @@ function renderPlan() {
   if (day) renderTrainingDay(day);
 }
 
-function keyFor(dayId, exerciseName) {
-  return `${dayId}|${exerciseName}`;
+function keyFor(dayId, slotId, exerciseName) {
+  return `${dayId}|${slotId}|${exerciseName}`;
 }
 
 function emptyEntry() {
   return { set1: "", set2: "", set3: "", rpe: "", pain: "" };
 }
 
-function fillInputs() {
-  daysEl.querySelectorAll("input[data-day]").forEach((input) => {
-    const entry = state.get(keyFor(input.dataset.day, input.dataset.ex));
-    input.value = entry ? entry[input.dataset.field] || "" : "";
-  });
+function parseSetMode(value, mode) {
+  const text = String(value || "").trim();
+  const empty = {
+    weight: "",
+    reps: "",
+    seconds: "",
+    minutes: "",
+    hr: "",
+    distance: "",
+    bodyweight: mode === "bodyweight"
+  };
+
+  if (!text) return empty;
+
+  if (mode === "time") {
+    const match = text.match(/(\d+)/);
+    return { ...empty, seconds: match ? match[1] : "" };
+  }
+
+  if (mode === "cardio") {
+    const match = text.match(/(\d+(?:[.,]\d+)?)\s*(?:мин)?(?:\s*\/\s*(\d+))?/i);
+    return {
+      ...empty,
+      minutes: match ? match[1].replace(",", ".") : "",
+      hr: match && match[2] ? match[2] : ""
+    };
+  }
+
+  if (mode === "carry") {
+    const match = text.match(
+      /(\d+(?:[.,]\d+)?)\s*(?:кг)?\s*[*x×х]\s*(\d+(?:[.,]\d+)?)/i
+    );
+    return {
+      ...empty,
+      weight: match ? match[1].replace(",", ".") : "",
+      distance: match ? match[2].replace(",", ".") : ""
+    };
+  }
+
+  const bodyweightMatch = text.match(
+    /^BW(?:\+(\d+(?:[.,]\d+)?))?\s*(?:кг)?\s*[*x×х·]\s*(\d+)$/i
+  );
+  if (bodyweightMatch) {
+    return {
+      ...empty,
+      bodyweight: true,
+      weight: bodyweightMatch[1] ? bodyweightMatch[1].replace(",", ".") : "",
+      reps: bodyweightMatch[2]
+    };
+  }
+
+  const weightMatch = text.match(/^(\d+(?:[.,]\d+)?)\s*(?:кг)?\s*[*x×х·]\s*(\d+)$/i);
+  if (weightMatch) {
+    return {
+      ...empty,
+      bodyweight: false,
+      weight: weightMatch[1].replace(",", "."),
+      reps: weightMatch[2]
+    };
+  }
+
+  return empty;
 }
+
+function formatSetMode(parsed, mode) {
+  if (mode === "time") {
+    return parsed.seconds ? `${parsed.seconds} сек` : "";
+  }
+
+  if (mode === "cardio") {
+    if (!parsed.minutes) return "";
+    return `${parsed.minutes} мин${parsed.hr ? ` / ${parsed.hr}` : ""}`;
+  }
+
+  if (mode === "carry") {
+    if (!parsed.weight && !parsed.distance) return "";
+    return `${parsed.weight || 0}*${parsed.distance || 0}м`;
+  }
+
+  if (!parsed.weight && !parsed.reps) return "";
+
+  if (parsed.bodyweight) {
+    return `BW${parsed.weight ? `+${parsed.weight}` : ""}*${parsed.reps || 0}`;
+  }
+
+  return `${parsed.weight || 0}*${parsed.reps || 0}`;
+}
+
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -546,20 +799,24 @@ function buildRows(date, stateSnapshot, userId) {
   const rows = [];
 
   PLAN.forEach((day) => {
-    day.items.forEach((item) => {
-      const entry = stateSnapshot.get(keyFor(day.id, item.name)) || emptyEntry();
+    day.slots.forEach((slot) => {
+      const selected = getSelectedOption(day, slot);
+      const entry =
+        stateSnapshot.get(keyFor(day.id, slot.id, selected.name)) || emptyEntry();
+
       rows.push({
         user_id: userId,
         workout_date: date,
         day: day.id,
-        exercise: item.name,
-        plan: item.target,
+        slot_id: slot.id,
+        exercise: selected.name,
+        plan: selected.target,
         set1: entry.set1 || null,
         set2: entry.set2 || null,
         set3: entry.set3 || null,
         rpe: entry.rpe || null,
         pain: entry.pain || null,
-        notes: item.note || null
+        notes: selected.note || null
       });
     });
   });
@@ -575,7 +832,7 @@ async function saveRows(date, stateSnapshot, userId) {
 
   try {
     result = await sb.from("workouts").upsert(buildRows(date, stateSnapshot, userId), {
-      onConflict: "user_id,workout_date,day,exercise"
+      onConflict: "user_id,workout_date,day,slot_id"
     });
   } catch (error) {
     cacheState(date, stateSnapshot);
@@ -636,27 +893,41 @@ async function loadForDate() {
   if (!currentUser || !sb) return;
 
   setStatus("Загрузка...");
-  const { data, error } = await sb
-    .from("workouts")
-    .select("*")
-    .eq("workout_date", currentDate);
+  const [currentResult, historyResult] = await Promise.all([
+    sb.from("workouts").select("*").eq("workout_date", currentDate),
+    sb
+      .from("workouts")
+      .select("day,slot_id,exercise,workout_date")
+      .lt("workout_date", currentDate)
+      .order("workout_date", { ascending: false })
+      .limit(2000)
+  ]);
 
-  if (error) {
+  if (currentResult.error) {
     const cached = readCache(currentDate);
     if (cached) {
       state = cached;
-      fillInputs();
+      renderPlan();
       setStatus("Нет связи с Supabase. Показаны локально сохранённые данные.");
       return;
     }
 
-    setStatus("Ошибка загрузки: " + error.message);
+    setStatus("Ошибка загрузки: " + currentResult.error.message);
     return;
   }
 
   state = new Map();
-  (data || []).forEach((row) => {
-    state.set(keyFor(row.day, row.exercise), {
+  selectedSlots = new Map();
+  slotHistory = new Map();
+
+  (currentResult.data || []).forEach((row) => {
+    const day = PLAN.find((item) => item.id === row.day);
+    const slot = findSlotForRow(day, row);
+    if (!day || !slot) return;
+
+    const exerciseName = normalizeExerciseName(row.exercise);
+    selectedSlots.set(slotKey(day.id, slot.id), exerciseName);
+    state.set(keyFor(day.id, slot.id, exerciseName), {
       set1: row.set1 || "",
       set2: row.set2 || "",
       set3: row.set3 || "",
@@ -665,16 +936,30 @@ async function loadForDate() {
     });
   });
 
+  (historyResult.data || []).forEach((row) => {
+    const day = PLAN.find((item) => item.id === row.day);
+    const slot = findSlotForRow(day, row);
+    if (!day || !slot) return;
+
+    const key = slotKey(day.id, slot.id);
+    if (!slotHistory.has(key)) {
+      slotHistory.set(key, normalizeExerciseName(row.exercise));
+    }
+  });
+
   const cached = readCache(currentDate);
   if (cached) {
     cached.forEach((entry, key) => state.set(key, entry));
-    fillInputs();
+    renderPlan();
     setStatus("Есть локальные правки. Нажми «Проверить связь», чтобы отправить их.");
     return;
   }
 
-  fillInputs();
-  setStatus(data && data.length ? "Загружено" : "Новая дата");
+  renderPlan();
+  setStatus(
+    (historyResult.error ? "Выполни supabase/schema_v3.sql. " : "") +
+      (currentResult.data && currentResult.data.length ? "Загружено" : "Новая дата")
+  );
 }
 
 function rowHasData(row) {
@@ -718,18 +1003,40 @@ async function autofillLastWorkout() {
     return;
   }
 
+  if (!day) return;
+
   const sourceRows = rows.filter((row) => row.workout_date === lastDate);
   let filled = 0;
 
-  sourceRows.forEach((row) => {
-    if (!row.exercise) return;
+  day.slots.forEach((slot) => {
+    const source = sourceRows.find((row) => {
+      if (row.slot_id) return row.slot_id === slot.id;
+      const normalized = normalizeExerciseName(row.exercise);
+      return slot.options.some((option) => option.name === normalized);
+    });
 
-    const key = keyFor(dayId, row.exercise);
+    if (!source || !source.exercise) return;
+
+    const sourceExercise = normalizeExerciseName(source.exercise);
+    const option = slot.options.find((item) => item.name === sourceExercise);
+    if (!option) return;
+
+    const currentSelected = getSelectedOption(day, slot);
+    const currentKey = keyFor(day.id, slot.id, currentSelected.name);
+    const currentEntry = state.get(currentKey) || emptyEntry();
+    const currentHasData = ["set1", "set2", "set3", "rpe", "pain"].some((field) =>
+      String(currentEntry[field] || "").trim()
+    );
+
+    if (currentHasData && currentSelected.name !== sourceExercise) return;
+
+    selectedSlots.set(slotKey(day.id, slot.id), sourceExercise);
+    const key = keyFor(day.id, slot.id, sourceExercise);
     const entry = state.get(key) || emptyEntry();
 
     ["set1", "set2", "set3", "rpe", "pain"].forEach((field) => {
       const currentValue = String(entry[field] || "").trim();
-      const sourceValue = String(row[field] || "").trim();
+      const sourceValue = String(source[field] || "").trim();
 
       if (!currentValue && sourceValue) {
         entry[field] = sourceValue;
@@ -740,7 +1047,7 @@ async function autofillLastWorkout() {
     state.set(key, entry);
   });
 
-  fillInputs();
+  renderPlan();
 
   if (filled) scheduleSave();
 
@@ -814,7 +1121,9 @@ function stopRestTimer() {
 
 function openLibrary(name) {
   const info = LIBRARY[name] || {};
-  const planItem = PLAN.flatMap((day) => day.items).find((item) => item.name === name);
+  const planItem = PLAN.flatMap((day) => day.slots.flatMap((slot) => slot.options)).find(
+    (item) => item.name === name
+  );
 
   modalTitle.textContent = name;
   modalBody.innerHTML = "";
@@ -848,7 +1157,12 @@ function renderLibrary(filter = "") {
   const query = filter.trim().toLowerCase();
   libraryList.innerHTML = "";
 
-  Object.keys(LIBRARY)
+  const allNames = new Set([
+    ...Object.keys(LIBRARY),
+    ...PLAN.flatMap((day) => day.slots.flatMap((slot) => slot.options.map((option) => option.name)))
+  ]);
+
+  [...allNames]
     .filter((name) => !query || name.toLowerCase().includes(query))
     .sort((a, b) => a.localeCompare(b, "ru"))
     .forEach((name) => {
@@ -869,18 +1183,35 @@ function renderLibrary(filter = "") {
 }
 
 function parseSet(value) {
-  const match = String(value || "").match(
-    /(\d+(?:[.,]\d+)?)\s*[x×х*·]\s*(\d+)/i
+  const text = String(value || "").trim();
+
+  const bodyweightMatch = text.match(
+    /^BW(?:\+(\d+(?:[.,]\d+)?))?\s*(?:кг)?\s*[*x×х·]\s*(\d+)$/i
   );
-  if (!match) return null;
+  if (bodyweightMatch) {
+    return {
+      weight: bodyweightMatch[1]
+        ? Number(bodyweightMatch[1].replace(",", "."))
+        : null,
+      reps: Number(bodyweightMatch[2]),
+      bodyweight: true
+    };
+  }
+
+  const weightMatch = text.match(/^(\d+(?:[.,]\d+)?)\s*(?:кг)?\s*[*x×х·]\s*(\d+)$/i);
+  if (!weightMatch) return null;
+
   return {
-    weight: Number(match[1].replace(",", ".")),
-    reps: Number(match[2])
+    weight: Number(weightMatch[1].replace(",", ".")),
+    reps: Number(weightMatch[2]),
+    bodyweight: false
   };
 }
 
 function statsForRow(row) {
-  const sets = [row.set1, row.set2, row.set3].map(parseSet).filter(Boolean);
+  const sets = [row.set1, row.set2, row.set3]
+    .map(parseSet)
+    .filter((set) => set && set.weight !== null);
   if (!sets.length) return null;
 
   const rpe = numberOrNull(row.rpe);
@@ -1610,11 +1941,12 @@ async function importJson(file) {
   const job = {
     table: "workouts",
     rows: workouts,
-    conflict: "user_id,workout_date,day,exercise",
+    conflict: "user_id,workout_date,day,slot_id",
     map: (row) => ({
       user_id: currentUser.id,
       workout_date: row.workout_date,
       day: row.day,
+      slot_id: slotIdForRow(row),
       exercise: row.exercise,
       plan: row.plan || null,
       set1: row.set1 || null,
@@ -1746,23 +2078,26 @@ function applySession(session) {
 
 function exportCsv() {
   const rows = [
-    ["Дата", "День", "Упражнение", "План", "Подход 1", "Подход 2", "Подход 3", "RPE", "Боль", "Заметки"]
+    ["Дата", "День", "Слот", "Упражнение", "План", "Подход 1", "Подход 2", "Подход 3", "RPE", "Боль", "Заметки"]
   ];
 
   PLAN.forEach((day) => {
-    day.items.forEach((item) => {
-      const entry = state.get(keyFor(day.id, item.name)) || emptyEntry();
+    day.slots.forEach((slot) => {
+      const selected = getSelectedOption(day, slot);
+      const entry =
+        state.get(keyFor(day.id, slot.id, selected.name)) || emptyEntry();
       rows.push([
         currentDate,
         day.title,
-        item.name,
-        item.target,
+        slot.label,
+        selected.name,
+        selected.target,
         entry.set1 || "",
         entry.set2 || "",
         entry.set3 || "",
         entry.rpe || "",
         entry.pain || "",
-        item.note || ""
+        selected.note || ""
       ]);
     });
   });
@@ -1783,13 +2118,43 @@ function exportCsv() {
 }
 
 daysEl.addEventListener("input", (event) => {
-  const input = event.target.closest("input[data-day]");
+  const input = event.target.closest("input[data-field]");
   if (!input) return;
 
-  const key = keyFor(input.dataset.day, input.dataset.ex);
+  const key = keyFor(input.dataset.day, input.dataset.slot, input.dataset.ex);
   const entry = state.get(key) || emptyEntry();
-  entry[input.dataset.field] = input.value;
+  const field = input.dataset.field;
+
+  if (field === "rpe" || field === "pain") {
+    entry[field] = input.value;
+  } else {
+    const setNumber = Number(input.dataset.set);
+    const mode = input.dataset.mode;
+    const parsed = parseSetMode(entry[`set${setNumber}`], mode);
+    parsed[field] = input.value;
+    entry[`set${setNumber}`] = formatSetMode(parsed, mode);
+  }
+
   state.set(key, entry);
+  scheduleSave();
+});
+
+daysEl.addEventListener("change", (event) => {
+  const checkbox = event.target.closest("input[data-bodyweight]");
+  if (!checkbox) return;
+
+  const { day, slot, ex, mode } = checkbox.dataset;
+  const key = keyFor(day, slot, ex);
+  const entry = state.get(key) || emptyEntry();
+
+  [1, 2, 3].forEach((setNumber) => {
+    const parsed = parseSetMode(entry[`set${setNumber}`], mode);
+    parsed.bodyweight = checkbox.checked;
+    entry[`set${setNumber}`] = formatSetMode(parsed, mode);
+  });
+
+  state.set(key, entry);
+  renderPlan();
   scheduleSave();
 });
 
@@ -1811,7 +2176,6 @@ dateInput.addEventListener("change", async () => {
 planDaySelect.addEventListener("change", () => {
   planDayMode = planDaySelect.value;
   renderPlan();
-  fillInputs();
 });
 
 tabs.addEventListener("click", (event) => {
