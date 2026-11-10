@@ -921,7 +921,7 @@ async function loadForDate() {
   selectedSlots = new Map();
   slotHistory = new Map();
 
-  (currentResult.data || []).forEach((row) => {
+  dedupeWorkoutRows(currentResult.data || []).forEach((row) => {
     const day = PLAN.find((item) => item.id === row.day);
     const slot = findSlotForRow(day, row);
     if (!day || !slot) return;
@@ -937,7 +937,7 @@ async function loadForDate() {
     });
   });
 
-  (historyResult.data || []).forEach((row) => {
+  dedupeWorkoutRows(historyResult.data || []).forEach((row) => {
     if (!rowHasData(row)) return;
 
     const day = PLAN.find((item) => item.id === row.day);
@@ -969,6 +969,29 @@ function rowHasData(row) {
   return ["set1", "set2", "set3", "rpe", "pain"].some(
     (field) => String(row[field] || "").trim()
   );
+}
+
+function dedupeWorkoutRows(rows) {
+  const groups = new Map();
+
+  rows.forEach((row) => {
+    const key = `${row.workout_date}|${row.day}`;
+    if (!groups.has(key)) groups.set(key, { slot: [], legacy: [] });
+    if (row.slot_id) groups.get(key).slot.push(row);
+    else groups.get(key).legacy.push(row);
+  });
+
+  return [...groups.values()].flatMap((group) => {
+    if (!group.slot.length) return group.legacy;
+
+    const covered = new Set(group.slot.map((row) => row.slot_id));
+    const extraLegacy = group.legacy.filter((row) => {
+      const slotId = slotIdForRow(row);
+      return slotId && !covered.has(slotId);
+    });
+
+    return [...group.slot, ...extraLegacy];
+  });
 }
 
 async function autofillLastWorkout() {
@@ -1752,7 +1775,7 @@ async function loadAnalytics(force = false) {
     sb.from("runs").select("*").order("run_date", { ascending: true }).limit(1000)
   ]);
 
-  analytics.workouts = workoutsResult.data || [];
+  analytics.workouts = dedupeWorkoutRows(workoutsResult.data || []);
   analytics.body = bodyResult.data || [];
   analytics.gto = gtoResult.data || [];
   analytics.runs = runsResult.data || [];
@@ -1962,7 +1985,7 @@ async function exportJson() {
   const payload = {
     version: 3,
     exported_at: new Date().toISOString(),
-    workouts: (workoutsResult.data || []).map(stripMeta),
+    workouts: dedupeWorkoutRows(workoutsResult.data || []).map(stripMeta),
     body_metrics: (bodyResult.data || []).map(stripMeta),
     gto_tests: (gtoResult.data || []).map(stripMeta),
     runs: (runsResult.data || []).map(stripMeta)
