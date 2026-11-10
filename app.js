@@ -897,7 +897,7 @@ async function loadForDate() {
     sb.from("workouts").select("*").eq("workout_date", currentDate),
     sb
       .from("workouts")
-      .select("day,slot_id,exercise,workout_date")
+      .select("day,slot_id,exercise,workout_date,set1,set2,set3,rpe,pain")
       .lt("workout_date", currentDate)
       .order("workout_date", { ascending: false })
       .limit(2000)
@@ -937,6 +937,8 @@ async function loadForDate() {
   });
 
   (historyResult.data || []).forEach((row) => {
+    if (!rowHasData(row)) return;
+
     const day = PLAN.find((item) => item.id === row.day);
     const slot = findSlotForRow(day, row);
     if (!day || !slot) return;
