@@ -1943,6 +1943,11 @@ function saveDates(event) {
   flashToast("Даты сохранены");
 }
 
+function stripMeta(row) {
+  const { id, user_id, updated_at, ...rest } = row;
+  return rest;
+}
+
 async function exportJson() {
   if (!currentUser || !sb) return;
 
@@ -1955,12 +1960,12 @@ async function exportJson() {
   ]);
 
   const payload = {
-    version: 2,
+    version: 3,
     exported_at: new Date().toISOString(),
-    workouts: workoutsResult.data || [],
-    body_metrics: bodyResult.data || [],
-    gto_tests: gtoResult.data || [],
-    runs: runsResult.data || []
+    workouts: (workoutsResult.data || []).map(stripMeta),
+    body_metrics: (bodyResult.data || []).map(stripMeta),
+    gto_tests: (gtoResult.data || []).map(stripMeta),
+    runs: (runsResult.data || []).map(stripMeta)
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -1969,11 +1974,11 @@ async function exportJson() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `training-backup-${currentDate}.json`;
+  link.download = `training-export-${currentDate}.json`;
   link.click();
   URL.revokeObjectURL(url);
   setBackupStatus(
-    `Скачано: тренировки ${payload.workouts.length}, замеры ${payload.body_metrics.length}, ГТО ${payload.gto_tests.length}, бег ${payload.runs.length}`
+    `Скачано без ID: тренировки ${payload.workouts.length}, замеры ${payload.body_metrics.length}, ГТО ${payload.gto_tests.length}, бег ${payload.runs.length}`
   );
 }
 
